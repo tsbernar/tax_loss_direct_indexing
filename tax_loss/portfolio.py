@@ -1,16 +1,57 @@
+import datetime
+import json
 from dataclasses import dataclass
-from typing import Dict, List
+from decimal import Decimal
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
 import tabulate
 
+SHARE_QUANTIZE = "0.1"  # allow trading in 10ths of shares
+
 
 class Portfolio:
-    def __init__(self):
+    def __init__(self) -> None:
         self.cash = 0
         self.ticker_to_cost_basis: Dict[str, CostBasisInfo] = {}
         self.ticker_to_market_price: Dict[str, float] = {}
+
+    @staticmethod
+    def from_json_file(filename: str) -> "Portfolio":
+        portfolio = Portfolio()
+
+        with open(filename) as f:
+            json_str = json.load(f)
+            for ticker, cost_basis_json in json_str["ticker_to_cost_basis"].items():
+                cost_basis_info = CostBasisInfo.from_json(cost_basis_json)
+                portfolio.ticker_to_cost_basis[ticker] = cost_basis_info
+
+            for ticker, market_price in json_str["ticker_to_market_price"].items():
+                portfolio.ticker_to_market_price[ticker] = market_price
+
+        return portfolio
+
+    def jsonable(
+        self,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, float], Dict[str, Union[str, List[Dict[str, Union[str, float]]]]]
+        ],
+    ]:
+        json_dict = {
+            "ticker_to_cost_basis": {},
+            "ticker_to_market_price": self.ticker_to_market_price,
+        }
+        for ticker, cost_basis in self.ticker_to_cost_basis.items():
+            json_dict["ticker_to_cost_basis"][ticker] = cost_basis.jsonable()
+
+        return json_dict
+
+    def to_json_file(self, filename: str, indent=2) -> None:
+        with open(filename, "w") as f:
+            json.dump(self.jsonable(), f, indent=indent)
 
     @property
     def nav(self):
@@ -20,8 +61,8 @@ class Portfolio:
             if total_basis.shares > 0:
                 if ticker not in self.ticker_to_market_price:
                     raise ValueError(f"No market price for {ticker}")
-                nav += total_basis.shares * self.ticker_to_market_price[ticker]
-        return nav
+                nav += float(total_basis.shares) * self.ticker_to_market_price[ticker]
+        return float(nav)
 
     def market_value(self, ticker):
         return (
@@ -66,7 +107,9 @@ class Portfolio:
         realized_gain = shares * price - total_basis
         return realized_gain
 
-    def _generate_positions_table(self, max_rows=None):
+    def _generate_positions_table(
+        self, max_rows: int, loss_sorted: bool
+    ) -> List[Dict[str, Union[str, int]]]:
         if max_rows is None:
             max_rows = len(self.ticker_to_cost_basis)
 
@@ -74,47 +117,54 @@ class Portfolio:
         for ticker, ci in list(self.ticker_to_cost_basis.items()):
             row = {}
             row["ticker"] = ticker
-            row["total_shares"] = ci.total_shares
+            row["total_shares"] = float(ci.total_shares)
             if ticker in self.ticker_to_market_price:
                 price = self.ticker_to_market_price[ticker]
                 loss_basis = ci.total_loss_basis(price)
-                row["total_shares_with_loss"] = loss_basis.shares
+                row["total_shares_with_loss"] = float(loss_basis.shares)
                 row[
                     "total_loss"
-                ] = f"${loss_basis.shares*(price - loss_basis.price) : ,.2f}"
+                ] = f"${float(loss_basis.shares)*(price - loss_basis.price) : ,.2f}"
                 row["market_price"] = f"${price : ,.2f}"
-                row["market_value"] = f"${price*ci.total_shares : ,.2f}"
-                row["%"] = f"{price*ci.total_shares/self.nav*100 : ,.2f}"
+                row["market_value"] = f"${price*row['total_shares']  : ,.2f}"
+                row["%"] = f"{price*row['total_shares']/self.nav*100 : ,.2f}"
 
             table.append(row)
-        table.sort(key=lambda x: x["%"], reverse=True)
+        table.sort(key=lambda x: (x["total_loss"], x["%"]), reverse=True)
         return table[:max_rows]
 
-    def head(self, max_rows=10):
+    def head(self, max_rows=10, loss_sorted=True) -> str:
         ret = f"Portfolio:\n nav:  ${self.nav : ,.2f}\n cash: ${self.cash : ,.2f}\n\n  "
         ret += tabulate.tabulate(
-            self._generate_positions_table(max_rows), headers="keys"
+            self._generate_positions_table(max_rows, loss_sorted), headers="keys"
         ).replace("\n", "\n  ")
         return ret
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.head(None)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.head(None)
 
 
 @dataclass
 class TaxLot:
-    shares: int
+    shares: Decimal
     price: float
-    date: pd.Timestamp
+    date: datetime.date
 
-    def __init__(self, shares, price):
+    def __init__(
+        self,
+        shares: Union[Decimal, int, float],
+        price: float,
+        date: Optional[datetime.date] = None,
+    ):
         # if no date provided, use today
-        self.shares = shares
+        self.shares = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE))
         self.price = price
-        self.date = pd.to_datetime(pd.Timestamp.now().date())
+        if not date:
+            date = datetime.date.today()
+        self.date = date
 
 
 @dataclass
@@ -122,22 +172,39 @@ class CostBasisInfo:
     ticker: str
     tax_lots: List[TaxLot]
 
-    def __init__(self, ticker, tax_lots):
+    def __init__(self, ticker: str, tax_lots: List[TaxLot]) -> None:
         self.ticker = ticker
         self.tax_lots = tax_lots
         self.sort()
 
+    def jsonable(self) -> Dict[str, Union[str, List[Dict[str, Union[str, float]]]]]:
+        result = {"ticker": self.ticker}
+        result["tax_lots"] = [
+            {"shares": str(t.shares), "price": t.price, "date": str(t.date)}
+            for t in self.tax_lots
+        ]
+        return result
+
+    @staticmethod
+    def from_json(json_str: str) -> "CostBasisInfo":
+        ticker = json_str["ticker"]
+        tax_lots = [
+            TaxLot(t["shares"], t["price"], pd.to_datetime(t["date"]).date())
+            for t in json_str["tax_lots"]
+        ]
+        return CostBasisInfo(ticker, tax_lots)
+
     @property
-    def total_basis(self):
+    def total_basis(self) -> TaxLot:
         total_price = 0
         total_shares = 0
         for tax_lot in self.tax_lots:
-            total_price += tax_lot.shares * tax_lot.price
+            total_price += float(tax_lot.shares) * tax_lot.price
             total_shares += tax_lot.shares
 
         return TaxLot(
             shares=total_shares,
-            price=(total_price / total_shares) if total_shares > 0 else 0,
+            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
         )
 
     @property
@@ -147,7 +214,7 @@ class CostBasisInfo:
     def sort(self):
         self.tax_lots.sort(key=lambda x: x.price, reverse=True)
 
-    def total_loss_basis(self, price: float):
+    def total_loss_basis(self, price: float) -> TaxLot:
         # Returns a TaxLot for all shares with a basis lower than price
         total_price = 0
         total_shares = 0
@@ -155,17 +222,17 @@ class CostBasisInfo:
         for tax_lot in self.tax_lots:
             if tax_lot.price > price:
                 total_shares += tax_lot.shares
-                total_price += tax_lot.shares * tax_lot.price
+                total_price += float(tax_lot.shares) * tax_lot.price
 
         return TaxLot(
             shares=total_shares,
-            price=(total_price / total_shares) if total_shares > 0 else 0,
+            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
         )
 
     # TODO add FIFO, LIFO handling if needed
-    def hifo_basis(self, shares: int):
+    def hifo_basis(self, shares: Union[int, float, Decimal]) -> TaxLot:
         # TODO: implementation of this bound by date (ex: hifo basis only for tax lots that count as long term gains)
-        shares_remaining = shares
+        shares_remaining = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE))
         total_price = 0
         total_shares = 0
 
@@ -177,10 +244,10 @@ class CostBasisInfo:
                 break
             shares_from_lot = min(tax_lot.shares, shares_remaining)
             shares_remaining -= shares_from_lot
-            total_price += shares_from_lot * tax_lot.price
+            total_price += float(shares_from_lot) * tax_lot.price
             total_shares += shares_from_lot
 
         return TaxLot(
             shares=total_shares,
-            price=(total_price / total_shares) if total_shares > 0 else 0,
+            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
         )

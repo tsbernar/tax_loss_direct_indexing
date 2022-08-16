@@ -4,10 +4,10 @@
 
 
 import unittest
+
 from click.testing import CliRunner
 
-from tax_loss import tax_loss
-from tax_loss import cli
+from tax_loss import cli, tax_loss
 
 
 class TestTax_loss(unittest.TestCase):
