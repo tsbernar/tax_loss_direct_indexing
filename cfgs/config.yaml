@@ -1,0 +1,7 @@
+log_level: INFO
+log_file: 'tax_loss.log'
+#TODO: Move these filenames to constants and just add data directory as config
+portfolio_file: 'data/portfolio.json'
+ticker_blacklist_file: 'data/ticker_blacklist.json'
+index_weight_file: 'data/IVV_weights.parquet'
+max_stocks: 100 # only consider top x stocks in index (minus blacklisted tickers)

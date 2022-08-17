@@ -8,3 +8,6 @@ atomic = true
 profile = "black"
 line_length = 120
 skip_gitignore = true
+
+[tool.mypy]
+ignore_missing_imports = true

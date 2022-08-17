@@ -101,11 +101,7 @@ class MinimizeOptimzer(IndexOptimizer):
         total_tax_loss = 0
         hifo_time = 0
 
-        share_changes = (
-            (weights - starting_portfolio_weights)
-            / starting_portfolio_prices
-            * starting_portfolio_nav
-        )
+        share_changes = (weights - starting_portfolio_weights) / starting_portfolio_prices * starting_portfolio_nav
         share_changes = pd.DataFrame(
             {
                 "share_change": share_changes,
@@ -119,16 +115,12 @@ class MinimizeOptimzer(IndexOptimizer):
             # THIS IS A BOTTLENECK, precompute hifo price and sahres for fixed share increments and look up in a matrix?
             t0 = time()
             hifo_basis_prices = share_sells.apply(
-                lambda x: starting_portfolio.ticker_to_cost_basis[x.ticker]
-                .hifo_basis(-x.share_change)
-                .price,
+                lambda x: starting_portfolio.ticker_to_cost_basis[x.ticker].hifo_basis(-x.share_change).price,
                 axis=1,
             )
             hifo_time = time() - t0
 
-            tax_loss = (
-                share_sells.market_price - hifo_basis_prices
-            ) * share_sells.share_change
+            tax_loss = (share_sells.market_price - hifo_basis_prices) * share_sells.share_change
             total_tax_loss = tax_loss.sum()
 
         return total_tax_loss / starting_portfolio_nav, hifo_time
@@ -200,25 +192,17 @@ class MinimizeOptimzer(IndexOptimizer):
         elif self.tracking_error_func == "var_tracking_diff":
             func = self._var_tracking_diff
         else:
-            raise ValueError(
-                f"Unrecognized tracking_error_func: {self.tracking_error_func}"
-            )
+            raise ValueError(f"Unrecognized tracking_error_func: {self.tracking_error_func}")
 
-        bounds = [
-            self._get_bounds(ticker, tw)
-            for ticker, tw in self.true_index_weights.iteritems()
-        ]
+        bounds = [self._get_bounds(ticker, tw) for ticker, tw in self.true_index_weights.iteritems()]
         cons = self.make_cash_constraints(self.cash_constraint)
         # TODO add constraint for sum abs diff from index
         # TODO add in penalty for churn
 
         ticker_indices = list(self.initial_weight_guess.index)
-        starting_portfolio_weights = [
-            self.starting_portfolio.weight(ticker) for ticker in ticker_indices
-        ]
+        starting_portfolio_weights = [self.starting_portfolio.weight(ticker) for ticker in ticker_indices]
         starting_portfolio_prices = [
-            self.starting_portfolio.ticker_to_market_price[ticker]
-            for ticker in ticker_indices
+            self.starting_portfolio.ticker_to_market_price[ticker] for ticker in ticker_indices
         ]
         starting_portfolio_nav = self.starting_portfolio.nav
 
@@ -244,7 +228,5 @@ class MinimizeOptimzer(IndexOptimizer):
             #  options={'eps':1e-8}
         )
 
-        minimize_weights = pd.Series(
-            result.x, index=self.initial_weight_guess.index
-        ).sort_values()
+        minimize_weights = pd.Series(result.x, index=self.initial_weight_guess.index).sort_values()
         return minimize_weights, result
