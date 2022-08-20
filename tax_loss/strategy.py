@@ -1,7 +1,7 @@
 import datetime
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import munch
 import pandas as pd
@@ -25,6 +25,7 @@ class DirectIndexTaxLossStrategy:
         pass
 
     def _load_ticker_blacklist(self, filename: str, config: munch.Munch) -> List[str]:
+        logger.debug(f"Loading ticker blacklist from {filename}")
         with open(filename) as f:
             ticker_to_expiry: Dict[str, Optional[str]] = json.loads(f.read())
 
@@ -35,16 +36,22 @@ class DirectIndexTaxLossStrategy:
             elif pd.to_datetime(expiry_str).date() < datetime.date.today():
                 ticker_blacklist.append(ticker)
 
-        return ticker_blacklist + config.ticker_blacklist_extra
+        logger.debug(f"Adding extra ticker blacklist from config: {config.ticker_blacklist_extra}")
+        ticker_blacklist = ticker_blacklist + config.ticker_blacklist_extra
+        logger.info(f"Ticker blacklist: {ticker_blacklist}")
+        return ticker_blacklist
 
     def _load_yf_prices(self, filename: str, lookback_days: int) -> pd.DataFrame:
-        start_date = datetime.date.today() - pd.Timedelta("365 days")
+        start_date = datetime.date.today() - pd.Timedelta(f"{lookback_days} days")
+        logger.debug(f"Loading yf price data from {start_date}")
         price_matrix = pd.read_parquet(filename)
         price_matrix = price_matrix[start_date:].dropna(axis=1)
+        logger.info(f"Price matrix: {price_matrix}")
         return price_matrix
 
     def _load_index_weights(self, filename: str, max_stocks: int) -> pd.Series:
         # returns a series with ticker as index and weight as values
+        logger.debug(f"Loading index weights from {filename}, max_stocks: {max_stocks}")
         df = pd.read_parquet(filename)
         # we only care about the lastest weights.. TODO: keep a seperate file cached with just latest date?
         date = df.date.max()
@@ -52,22 +59,36 @@ class DirectIndexTaxLossStrategy:
         weights = weights.sort_values("Weight (%)").tail(max_stocks)
         weights = weights.set_index("Ticker")["Weight (%)"].sort_index()
         weights = weights / 100  # convert from % value
+        weights["IVV"] = 0
 
         logger.info(f"Loaded {len(weights)} index weights from {date}")
         return weights
 
-    def _make_index_returns(self, ticker: str):
+    def _make_index_returns(self, ticker: str) -> pd.DataFrame:
         return self.price_matrix[ticker].pct_change().tail(-1)
 
-    def _make_component_returns(self):
+    def _make_component_returns(self) -> pd.DataFrame:
         return self.price_matrix.pct_change().tail(-1)
 
+    def _drop_missing_tickers(
+        self, component_returns: pd.DataFrame, index_weights: pd.Series
+    ) -> Tuple[pd.DataFrame, pd.Series]:
+        missing_tickers = [m for m in index_weights.index if m not in component_returns.columns]
+        logger.info("Dropping tickers witih missing price data: {missing_tickers}")
+        tickers = index_weights.index.drop(missing_tickers)
+        component_returns = component_returns[tickers]
+        index_weights = index_weights[tickers]
+        return component_returns, index_weights
+
     def _init_optimzier(self, config: munch.Munch) -> IndexOptimizer:
+        logger.info("Initializing optimzer")
         index_returns = self._make_index_returns("IVV")
-        component_returns = self._make_component_returns()  # TODO drop missing tickers from this
+        component_returns = self._make_component_returns()
         #  TODO add 0 weight for positions currently in pf but that are dropped from index?
         # So we don't have to immediately sell when they are dropped
         true_index_weights = self.index_weights
+        component_returns, true_index_weights = self._drop_missing_tickers(component_returns, true_index_weights)
+
         tax_coefficient = float(config.tax_coefficient)
         starting_portfolio = self.current_portfolio
         initial_weight_guess = self.index_weights  # TODO (guess current pf or true weights if current is too far off?)
