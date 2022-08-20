@@ -1,7 +1,9 @@
 import datetime
 import json
+import logging
+from copy import deepcopy
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
@@ -9,28 +11,55 @@ import tabulate
 
 SHARE_QUANTIZE = "0.1"  # allow trading in 10ths of shares
 
+logger = logging.getLogger(__name__)
+
 
 class Portfolio:
-    def __init__(self) -> None:
+    def __init__(self, filename=None) -> None:
         self.cash = 0.0
         self.ticker_to_cost_basis: Dict[str, CostBasisInfo] = {}
         self.ticker_to_market_price: Dict[str, MarketPrice] = {}
+        if filename:
+            self._from_json_file(filename)
 
-    @staticmethod
-    def from_json_file(filename: str) -> "Portfolio":
-        portfolio = Portfolio()
+    @classmethod
+    def from_weights(
+        cls, weights: pd.Series, nav: float, ticker_to_market_price: Dict[str, "MarketPrice"]
+    ) -> "Portfolio":
+        logger.info(f"Constructing portfolio from weights {weights}")
+        assert weights.sum() <= 1.0 + 1e-6  # allow for some floating point errors
+        pf = cls()
+        pf.cash = nav
+        pf.ticker_to_market_price = deepcopy(ticker_to_market_price)
+        for ticker, weight in weights.items():
+            price = pf.ticker_to_market_price[ticker].price
+            shares = weight * nav / price
+            # Round down to avoid using more than nav value
+            shares = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE), rounding=ROUND_DOWN)
+            pf.buy(ticker, shares, price)
 
+        # Now go back and fill in extra shares with any extra cash
+        under_weight_cash = {t: (w - pf.weight(t)) * nav for t, w in weights.items() if pf.weight(t) < w}
+        logger.debug(f"Under weight: {under_weight_cash}")
+        after_buy = {t: (pf.ticker_to_market_price[t].price * float(SHARE_QUANTIZE) - c) for t, c in under_weight_cash}
+
+        for ticker, after_buy in sorted(after_buy.items(), key=lambda x: x[1]):
+            price = pf.ticker_to_market_price[ticker].price
+            if price * float(SHARE_QUANTIZE) < pf.cash:
+                pf.buy(ticker, Decimal(SHARE_QUANTIZE), price)
+
+        return pf
+
+    def _from_json_file(self, filename: str) -> None:
         with open(filename) as f:
             json_dict = json.load(f)
             for ticker, cost_basis_json in json_dict["ticker_to_cost_basis"].items():
                 cost_basis_info = CostBasisInfo.from_json(cost_basis_json)
-                portfolio.ticker_to_cost_basis[ticker] = cost_basis_info
+                self.ticker_to_cost_basis[ticker] = cost_basis_info
 
             for ticker, market_price_json in json_dict["ticker_to_market_price"].items():
                 market_price = MarketPrice.from_json(market_price_json)
-                portfolio.ticker_to_market_price[ticker] = market_price
-
-        return portfolio
+                self.ticker_to_market_price[ticker] = market_price
 
     def jsonable(
         self,

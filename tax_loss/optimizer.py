@@ -1,10 +1,13 @@
 import abc
+import logging
 from time import time
 from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
+from scipy.optimize import OptimizeResult, minimize
+
+logger = logging.getLogger(__name__)
 
 
 class IndexOptimizer(abc.ABC):
@@ -79,7 +82,7 @@ class MinimizeOptimizer(IndexOptimizer):
 
     def _get_bounds(self, ticker, tw):
         if ticker in self.ticker_blacklist:
-            return self.ticker_blacklist[ticker]
+            return self.ticker_blacklist[ticker]  # TODO we should keep the min here even if in blacklist in some cases
         min_bound = max(0, tw - self.max_deviation_from_true_weight)
         max_bound = tw + self.max_deviation_from_true_weight
         return (min_bound, max_bound)
@@ -174,19 +177,18 @@ class MinimizeOptimizer(IndexOptimizer):
         times[2] += hifo_time
         times[4] += 1
 
-        if time() - times[3] > 10:
-            print(
-                f"tracking_error: {tracking_error : .4f}, "
-                f"tax_loss_harvested: {tax_loss_harvested : .4f}, "
-                f"tax score: {tax_coefficient*tax_loss_harvested : .4f}, "
-                f"total score: {tracking_error - tax_coefficient*tax_loss_harvested : .4f}, "
-                f"tracking_error_time: {times[0] : .2f}s, tax_loss_time: {times[1] : .2f}s, "
-                f"hifo_time: {times[2]: .2f}s, count: {times[4]}"
-            )
-            times[3] = time()
+        logger.debug(
+            f"tracking_error: {tracking_error : .4f}, "
+            f"tax_loss_harvested: {tax_loss_harvested : .4f}, "
+            f"tax score: {tax_coefficient*tax_loss_harvested : .4f}, "
+            f"total score: {tracking_error - tax_coefficient*tax_loss_harvested : .4f}, "
+            f"tracking_error_time: {times[0] : .2f}s, tax_loss_time: {times[1] : .2f}s, "
+            f"hifo_time: {times[2]: .2f}s, count: {times[4]}"
+        )
+        times[3] = time()
         return tracking_error - tax_coefficient * tax_loss_harvested
 
-    def optimize(self):
+    def optimize(self) -> Tuple[pd.Series, OptimizeResult]:
         if self.tracking_error_func == "least_squared":
             func = self._least_squared
         elif self.tracking_error_func == "var_tracking_diff":
@@ -207,8 +209,6 @@ class MinimizeOptimizer(IndexOptimizer):
         ]
         starting_portfolio_nav = self.starting_portfolio.nav
 
-        print(len(bounds), len(self.initial_weight_guess), len(self.component_returns))
-
         result = minimize(
             self._score,
             self.initial_weight_guess,
@@ -226,6 +226,7 @@ class MinimizeOptimizer(IndexOptimizer):
             ),
             bounds=bounds,
             constraints=cons,
+            options={"maxiter": 200}  # double the default max
             #  options={'eps':1e-8}
         )
 

@@ -15,14 +15,28 @@ logger = logging.getLogger(__name__)
 class DirectIndexTaxLossStrategy:
     def __init__(self, config: munch.Munch) -> None:
         self.config = config
-        self.current_portfolio: Portfolio = Portfolio.from_json_file(config.portfolio_file)
+        self.current_portfolio: Portfolio = Portfolio(filename=config.portfolio_file)
         self.ticker_blacklist: List[str] = self._load_ticker_blacklist(config.ticker_blacklist_file, config)
         self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.price_matrix = self._load_yf_prices(config.price_data_file, config.optimizer.lookback_days)
         self.optimizer = self._init_optimzier(config.optimizer)
 
     def run(self) -> None:
-        pass
+        logger.info("Running optimization")
+        weights, result = self.optimizer.optimize()
+        logger.info(f"Weights: {weights}")
+        desired_portfolio = Portfolio.from_weights(
+            weights=weights,
+            nav=self.current_portfolio.nav,
+            ticker_to_market_price=self.current_portfolio.ticker_to_market_price,
+        )
+        logger.info(f"Desired portfolio: {desired_portfolio}")
+        # desired_transactions = transaction_planner(current_portfolio, desired_portfolio)
+        # transaction results = gateway(desired_transactions)
+        # current_portfolio = f(current_portfolio, transaction_results)
+        # blacklist additions = f(transaction results)
+        # save data (current porfolio, blacklist)
+        # pull IBKR pf data, sanity check vs current pf?
 
     def _load_ticker_blacklist(self, filename: str, config: munch.Munch) -> List[str]:
         logger.debug(f"Loading ticker blacklist from {filename}")

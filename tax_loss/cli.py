@@ -5,6 +5,7 @@ import sys
 import click
 import munch
 import yaml  # type: ignore
+
 from .strategy import DirectIndexTaxLossStrategy
 
 
