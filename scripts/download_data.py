@@ -84,7 +84,7 @@ def save_sp500_weighting_data(start_date, end_date, data_directory, ticker_corre
             continue
         requested_dates[date] = True
 
-        csv = data.text[data.text.find("Ticker") :]
+        csv = data.text[data.text.find("Ticker"):]
         csv = csv[: csv.find("\n\xa0\n")]
 
         if csv:

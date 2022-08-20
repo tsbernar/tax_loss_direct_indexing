@@ -135,7 +135,7 @@ class MinimizeOptimzer(IndexOptimizer):
         return np.var(tracking_diff)
 
     @staticmethod
-    def make_cash_constraints(cash_constraint):
+    def _make_cash_constraints(cash_constraint):
         # must use at least cash_constraint% of cash (this constraint functions should return >=0 when condition met)
         # can't use more than available cash (this constraint functions should return >=0 when condition met)
         cons = [
@@ -195,9 +195,10 @@ class MinimizeOptimzer(IndexOptimizer):
             raise ValueError(f"Unrecognized tracking_error_func: {self.tracking_error_func}")
 
         bounds = [self._get_bounds(ticker, tw) for ticker, tw in self.true_index_weights.iteritems()]
-        cons = self.make_cash_constraints(self.cash_constraint)
+        cons = self._make_cash_constraints(self.cash_constraint)
         # TODO add constraint for sum abs diff from index
         # TODO add in penalty for churn
+        # TODO some of this should be moved to init
 
         ticker_indices = list(self.initial_weight_guess.index)
         starting_portfolio_weights = [self.starting_portfolio.weight(ticker) for ticker in ticker_indices]
