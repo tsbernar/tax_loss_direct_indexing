@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 import munch
 import pandas as pd
 
-from .optimizer import IndexOptimizer, MinimizeOptimzer
+from .optimizer import IndexOptimizer, MinimizeOptimizer
 from .portfolio import Portfolio
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class DirectIndexTaxLossStrategy:
         self.ticker_blacklist: List[str] = self._load_ticker_blacklist(config.ticker_blacklist_file, config)
         self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.price_matrix = self._load_yf_prices(config.price_data_file, config.optimizer.lookback_days)
-        self.optimizer = self._init_optimzier(config.optimzer)
+        self.optimizer = self._init_optimzier(config.optimizer)
 
     def run(self) -> None:
         pass
@@ -74,14 +74,14 @@ class DirectIndexTaxLossStrategy:
         self, component_returns: pd.DataFrame, index_weights: pd.Series
     ) -> Tuple[pd.DataFrame, pd.Series]:
         missing_tickers = [m for m in index_weights.index if m not in component_returns.columns]
-        logger.info("Dropping tickers witih missing price data: {missing_tickers}")
+        logger.info(f"Dropping tickers witih missing price data: {missing_tickers}")
         tickers = index_weights.index.drop(missing_tickers)
         component_returns = component_returns[tickers]
         index_weights = index_weights[tickers]
         return component_returns, index_weights
 
     def _init_optimzier(self, config: munch.Munch) -> IndexOptimizer:
-        logger.info("Initializing optimzer")
+        logger.info("Initializing optimizer")
         index_returns = self._make_index_returns("IVV")
         component_returns = self._make_component_returns()
         #  TODO add 0 weight for positions currently in pf but that are dropped from index?
@@ -106,7 +106,7 @@ class DirectIndexTaxLossStrategy:
 
         cash_constraint = config.cash_constraint
         tracking_error_func = config.tracking_error_func
-        optimizer = MinimizeOptimzer(
+        optimizer = MinimizeOptimizer(
             index_returns=index_returns,
             component_returns=component_returns,
             true_index_weights=true_index_weights,

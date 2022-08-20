@@ -51,7 +51,7 @@ class IndexOptimizer(abc.ABC):
         pass
 
 
-class MinimizeOptimzer(IndexOptimizer):
+class MinimizeOptimizer(IndexOptimizer):
     def __init__(
         self,
         index_returns,
@@ -162,7 +162,7 @@ class MinimizeOptimzer(IndexOptimizer):
         tracking_error = tracking_error_func(index_returns, component_returns, weights)
         times[0] += time() - t0
         t0 = time()
-        tax_loss_harvested, hifo_time = MinimizeOptimzer._tax_loss_pct_harvested(
+        tax_loss_harvested, hifo_time = MinimizeOptimizer._tax_loss_pct_harvested(
             weights,
             ticker_indices,
             starting_portfolio,
