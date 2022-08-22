@@ -26,7 +26,7 @@ class Portfolio:
     def from_weights(
         cls, weights: pd.Series, nav: float, ticker_to_market_price: Dict[str, "MarketPrice"]
     ) -> "Portfolio":
-        logger.info(f"Constructing portfolio from weights {weights}")
+        logger.info(f"Constructing portfolio from weights:\n{weights.sort_values()}")
         assert weights.sum() <= 1.0 + 1e-6  # allow for some floating point errors
         pf = cls()
         pf.cash = nav
@@ -40,8 +40,10 @@ class Portfolio:
 
         # Now go back and fill in extra shares with any extra cash
         under_weight_cash = {t: (w - pf.weight(t)) * nav for t, w in weights.items() if pf.weight(t) < w}
-        logger.debug(f"Under weight: {under_weight_cash}")
-        after_buy = {t: (pf.ticker_to_market_price[t].price * float(SHARE_QUANTIZE) - c) for t, c in under_weight_cash}
+        logger.debug(f"Under weight cash values:\n{json.dumps(under_weight_cash,indent=2)}")
+        after_buy = {
+            t: (pf.ticker_to_market_price[t].price * float(SHARE_QUANTIZE) - c) for t, c in under_weight_cash.items()
+        }
 
         for ticker, after_buy in sorted(after_buy.items(), key=lambda x: x[1]):
             price = pf.ticker_to_market_price[ticker].price

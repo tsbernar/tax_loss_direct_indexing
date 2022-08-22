@@ -15,6 +15,8 @@ def setup_logging(config):
     log_fmt = "[%(asctime)s] %(levelname)s %(filename)s:%(funcName)s:%(lineno)i :: %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
     logging.basicConfig(filename=log_file, format=log_fmt, level=log_level, datefmt=datefmt)
+    #  Stop libraries from logging too much info
+    logging.getLogger("numba").setLevel(logging.WARNING)
 
 
 def read_config(filepath):

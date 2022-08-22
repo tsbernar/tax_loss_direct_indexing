@@ -205,7 +205,7 @@ class MinimizeOptimizer(IndexOptimizer):
         ticker_indices = list(self.initial_weight_guess.index)
         starting_portfolio_weights = [self.starting_portfolio.weight(ticker) for ticker in ticker_indices]
         starting_portfolio_prices = [
-            self.starting_portfolio.ticker_to_market_price[ticker] for ticker in ticker_indices
+            self.starting_portfolio.ticker_to_market_price[ticker].price for ticker in ticker_indices
         ]
         starting_portfolio_nav = self.starting_portfolio.nav
 
