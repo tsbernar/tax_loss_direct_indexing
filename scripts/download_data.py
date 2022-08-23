@@ -142,7 +142,7 @@ def save_yf_data(start_date, end_date, tickers, filepath):
 
 
 @click.command()
-@click.option("--filepath", default=DEFAULT_DATA_DIR, type=str, help='Path to data directory')
+@click.option("--filepath", default=DEFAULT_DATA_DIR, type=str, help="Path to data directory")
 @click.option("--start_date", default=DEFAULT_START, type=str)
 @click.option("--end_date", type=str)
 @click.option("--ticker_data", is_flag=True)
