@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
 import munch
@@ -8,8 +9,10 @@ import pandas as pd
 
 from .optimizer import IndexOptimizer, MinimizeOptimizer
 from .portfolio import MarketPrice, Portfolio
+from .trade import Side, Trade
 
 INDEX_TICKER = "IVV"
+PX_PRECISION = "0.01"
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +36,11 @@ class DirectIndexTaxLossStrategy:
             ticker_to_market_price=self.current_portfolio.ticker_to_market_price,
         )
         logger.info(f"Desired portfolio:\n{desired_portfolio}")
+        desired_trades = self._plan_transactions(
+            desired_portfolio=desired_portfolio, current_portfolio=self.current_portfolio
+        )
+        logger.info(f"Desired trades:\n{chr(10).join(map(str,desired_trades))}")
+
         # desired_transactions = transaction_planner(current_portfolio, desired_portfolio)
         # transaction results = gateway(desired_transactions)
         # current_portfolio = f(current_portfolio, transaction_results)
@@ -110,6 +118,35 @@ class DirectIndexTaxLossStrategy:
         component_returns = component_returns[tickers]
         index_weights = index_weights[tickers]
         return component_returns, index_weights
+
+    def _plan_transactions(self, desired_portfolio: Portfolio, current_portfolio: Portfolio) -> List[Trade]:
+        logger.info("Planning transactins")
+        desired_tickers = set(desired_portfolio.ticker_to_cost_basis.keys())
+        current_tickers = set(current_portfolio.ticker_to_cost_basis.keys())
+        trades = []
+
+        for ticker in desired_tickers.union(current_tickers):
+            current_qty = Decimal()
+            desired_qty = Decimal()
+            if ticker in current_portfolio.ticker_to_cost_basis:
+                current_qty = current_portfolio.ticker_to_cost_basis[ticker].total_shares
+            if ticker in desired_portfolio.ticker_to_cost_basis:
+                desired_qty = desired_portfolio.ticker_to_cost_basis[ticker].total_shares
+
+            trade_qty = desired_qty - current_qty
+
+            if trade_qty == 0:
+                logger.info(f"No trade for {ticker}")
+                continue
+
+            # TODO maybe assume some slippage when making desired pf?
+            trade_px = Decimal(desired_portfolio.ticker_to_market_price[ticker].price)
+            trade_px = trade_px.quantize(Decimal(PX_PRECISION))
+            side = Side.BUY if trade_qty > 0 else Side.SELL
+            trade = Trade(qty=abs(trade_qty), price=trade_px, side=side, symbol=ticker)
+            trades.append(trade)
+
+        return trades
 
     def _init_optimzier(self, config: munch.Munch) -> IndexOptimizer:
         logger.info("Initializing optimizer")
