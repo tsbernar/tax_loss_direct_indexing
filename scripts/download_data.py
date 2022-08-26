@@ -20,8 +20,10 @@ EXTRA_YF_TICKERS = ["IVV"]
 
 TICKER_CORRECTION_MAP = {
     "BRKB": "BRK-B",
-    "GEC": "GE,",
+    "GEC": "GE",
+    "GE,": "GE",
     "GOOGL": "GOOG",
+    "FB": "META"
 }
 
 
