@@ -72,7 +72,7 @@ class MinimizeOptimizer(IndexOptimizer):
         tracking_error_func: str = "least_squared",
         max_total_deviation: float = 0.8,
     ):
-
+        # TODO: make max_total_deviation and tax_coefficient optional.. can significanlty speed up optimiziation if not provided
         self.index_returns = index_returns
         self.component_returns = component_returns
         self.true_index_weights = true_index_weights
