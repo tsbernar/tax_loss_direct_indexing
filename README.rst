@@ -2,24 +2,23 @@
 tax_loss
 ========
 
+Development
+--------
+Getting started:
+1. conda create -n tax_loss python=3.9 poetry invoke -y  # Create conda env
+2. conda activate tax_loss  # Activate env
+3. inv update  # Install dependencies
+4. inv install # Install package
 
+Running locally:
+1. poetry run tax_loss
 
-
-
-
-Python Boilerplate contains all the boilerplate you need to create a Python package.
-
-
+Building
+--------
+1. inv build
 
 Features
 --------
 
 * TODO
 
-Credits
--------
-
-This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypackage`_ project template.
-
-.. _Cookiecutter: https://github.com/audreyr/cookiecutter
-.. _`audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage

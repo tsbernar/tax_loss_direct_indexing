@@ -2,8 +2,25 @@ from invoke import task
 
 
 @task
+def build(c):
+    c.run("poetry build")
+
+
+@task
+def update(c):
+    c.run("poetry update")
+
+
+@task
+def install(c, no_dev=False):
+    if no_dev:
+        c.run("poetry install --no-dev")
+    else:
+        c.run("poetry install")
+
+
+@task
 def check(c, ignore_types=False):
-    print(ignore_types)
     print("Running isort...")
     c.run("isort tax_loss")
     print("Running black...")
