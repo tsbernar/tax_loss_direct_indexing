@@ -63,12 +63,15 @@ class Portfolio:
                 market_price = MarketPrice.from_json(market_price_json)
                 self.ticker_to_market_price[ticker] = market_price
 
+            self.cash = json_dict["cash"]
+
     def jsonable(
         self,
-    ) -> Dict[str, Union[Dict[str, float], Dict[str, Union[str, List[Dict[str, Union[str, float]]]]]]]:
+    ) -> Dict[str, Union[float, Dict[str, float], Dict[str, Union[str, List[Dict[str, Union[str, float]]]]]]]:
         json_dict: Dict[str, Any] = {
             "ticker_to_cost_basis": {},
             "ticker_to_market_price": {},
+            "cash": self.cash,
         }
         for ticker, cost_basis in self.ticker_to_cost_basis.items():
             json_dict["ticker_to_cost_basis"][ticker] = cost_basis.jsonable()
