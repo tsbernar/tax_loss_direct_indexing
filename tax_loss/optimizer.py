@@ -1,11 +1,14 @@
 import abc
 import logging
+from functools import partial
 from time import time
-from typing import Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import OptimizeResult, minimize
+
+from .portfolio import Portfolio
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +60,17 @@ class IndexOptimizer(abc.ABC):
 class MinimizeOptimizer(IndexOptimizer):
     def __init__(
         self,
-        index_returns,
-        component_returns,
-        true_index_weights,
-        tax_coefficient,
-        starting_portfolio,
-        initial_weight_guess,
-        max_deviation_from_true_weight=0.03,
+        index_returns: pd.Series,
+        component_returns: pd.DataFrame,
+        true_index_weights: pd.Series,
+        tax_coefficient: float,
+        starting_portfolio: Portfolio,
+        initial_weight_guess: pd.Series,
+        max_deviation_from_true_weight: float = 0.03,
         ticker_blacklist: Dict[str, Tuple[float, float]] = {},
-        cash_constraint=0.95,
-        tracking_error_func="least_squared",
+        cash_constraint: float = 0.95,
+        tracking_error_func: str = "least_squared",
+        max_total_deviation: float = 0.8,
     ):
 
         self.index_returns = index_returns
@@ -78,7 +82,14 @@ class MinimizeOptimizer(IndexOptimizer):
         self.ticker_blacklist = ticker_blacklist
         self.max_deviation_from_true_weight = max_deviation_from_true_weight
         self.cash_constraint = cash_constraint
-        self.tracking_error_func = tracking_error_func
+        self.max_total_deviation = max_total_deviation
+
+        if tracking_error_func == "least_squared":
+            self.tracking_error_func = self._least_squared
+        elif tracking_error_func == "var_tracking_diff":
+            self.tracking_error_func = self._var_tracking_diff
+        else:
+            raise ValueError(f"Unrecognized tracking_error_func: {self.tracking_error_func}")
 
     def _get_bounds(self, ticker, tw):
         if ticker in self.ticker_blacklist:
@@ -138,37 +149,67 @@ class MinimizeOptimizer(IndexOptimizer):
         return np.var(tracking_diff)
 
     @staticmethod
-    def _make_cash_constraints(cash_constraint):
+    def x_to_weights(x: np.ndarray) -> np.ndarray:
+        # 1st half of input is weights, 2nd half is extra vars for index drift constraints
+        return x[: len(x) // 2]
+
+    @staticmethod
+    def x_to_extra_vars(x: np.ndarray) -> np.ndarray:
+        # 1st half of input is weights, 2nd half is extra vars for index drift constraints
+        return x[len(x) // 2 :]
+
+    def _make_cash_constraints(self) -> List[Dict[str, Any]]:
         # must use at least cash_constraint% of cash (this constraint functions should return >=0 when condition met)
         # can't use more than available cash (this constraint functions should return >=0 when condition met)
         cons = [
-            {"type": "ineq", "fun": lambda x: x.sum() - cash_constraint},
-            {"type": "ineq", "fun": lambda x: 1 - x.sum()},
+            {"type": "ineq", "fun": lambda x: self.x_to_weights(x).sum() - self.cash_constraint},
+            {"type": "ineq", "fun": lambda x: 1 - self.x_to_weights(x).sum()},
         ]
         return cons
 
-    @staticmethod
-    def _score(x, *args):
-        weights = x
-        index_returns = args[0]
-        component_returns = args[1]
-        tax_coefficient = args[2]
-        ticker_indices = args[3]
-        tracking_error_func = args[4]
-        starting_portfolio = args[5]
-        times = args[6]
-        starting_portfolio_weights = args[7]
-        starting_portfolio_prices = args[8]
-        starting_portfolio_nav = args[9]
+    def _make_index_drift_constraints(self) -> List[Dict[str, Any]]:
+        # constraint for sum(abs(weights - true_index_weights)) < index_drift_constraint
+        # because we can't use absolute values in optimization, we need to restate the constraints with extra variables
+        # abs(a) + abs(b) < c is equivilant to:
+        # x + y = c
+        # x - a > c; x + a > 0
+        # y - b > c; y + b < 0
+        # https://optimization.cbe.cornell.edu/index.php?title=Optimization_with_absolute_values#Application_in_Financial:_Portfolio_Selection
+        # https://stackoverflow.com/questions/29795632/sum-of-absolute-values-constraint-in-semi-definite-programming
+        def drift_constraint(x: np.ndarray, ix: int, true_index_weights: pd.Series):
+            ei = self.x_to_extra_vars(x)[ix]
+            wi = self.x_to_weights(x)[ix]
+            ci = true_index_weights[ix]
+            return min(ei - (wi - ci), ei + (wi - ci))
+
+        cons = [{"type": "eq", "fun": lambda x: self.x_to_extra_vars(x).sum() - self.max_total_deviation}]
+        for i in range(len(self.true_index_weights)):
+            cons.append(
+                {"type": "ineq", "fun": partial(drift_constraint, ix=i, true_index_weights=self.true_index_weights)}
+            )
+        return cons
+
+    def _score(
+        self,
+        x: np.ndarray,
+        ticker_indices: List[str],
+        times: List[float],
+        starting_portfolio_weights: List[float],
+        starting_portfolio_prices: List[float],
+        starting_portfolio_nav: float,
+    ):
+        # TODO clean up this funciton now that it no longer needs to be static should access self. more and not pass so
+        # many args
+        weights = self.x_to_weights(x)
 
         t0 = time()
-        tracking_error = tracking_error_func(index_returns, component_returns, weights)
+        tracking_error = self.tracking_error_func(self.index_returns, self.component_returns, weights)
         times[0] += time() - t0
         t0 = time()
         tax_loss_harvested, hifo_time = MinimizeOptimizer._tax_loss_pct_harvested(
             weights,
             ticker_indices,
-            starting_portfolio,
+            self.starting_portfolio,
             starting_portfolio_weights,
             starting_portfolio_prices,
             starting_portfolio_nav,
@@ -180,26 +221,19 @@ class MinimizeOptimizer(IndexOptimizer):
         logger.debug(
             f"tracking_error: {tracking_error : .4f}, "
             f"tax_loss_harvested: {tax_loss_harvested : .4f}, "
-            f"tax score: {tax_coefficient*tax_loss_harvested : .4f}, "
-            f"total score: {tracking_error - tax_coefficient*tax_loss_harvested : .4f}, "
+            f"tax score: {self.tax_coefficient*tax_loss_harvested : .4f}, "
+            f"total score: {tracking_error - self.tax_coefficient*tax_loss_harvested : .4f}, "
             f"tracking_error_time: {times[0] : .2f}s, tax_loss_time: {times[1] : .2f}s, "
             f"hifo_time: {times[2]: .2f}s, count: {times[4]}"
         )
         times[3] = time()
-        return tracking_error - tax_coefficient * tax_loss_harvested
+        return tracking_error - self.tax_coefficient * tax_loss_harvested
 
     def optimize(self) -> Tuple[pd.Series, OptimizeResult]:
-        if self.tracking_error_func == "least_squared":
-            func = self._least_squared
-        elif self.tracking_error_func == "var_tracking_diff":
-            func = self._var_tracking_diff
-        else:
-            raise ValueError(f"Unrecognized tracking_error_func: {self.tracking_error_func}")
 
         bounds = [self._get_bounds(ticker, tw) for ticker, tw in self.true_index_weights.iteritems()]
-        cons = self._make_cash_constraints(self.cash_constraint)
-        # TODO add constraint for sum abs diff from index
-        # TODO add in penalty for churn
+        cons = self._make_cash_constraints()
+        # TODO add in extra penalty for churn
         # TODO some of this should be moved to init
 
         ticker_indices = list(self.initial_weight_guess.index)
@@ -209,17 +243,19 @@ class MinimizeOptimizer(IndexOptimizer):
         ]
         starting_portfolio_nav = self.starting_portfolio.nav
 
+        index_drift_extra_vars = pd.Series(
+            [self.max_total_deviation / len(self.initial_weight_guess) for i in self.initial_weight_guess]
+        )
+        x0 = pd.concat([self.initial_weight_guess, index_drift_extra_vars])
+        bounds += [(-np.inf, np.inf) for x in index_drift_extra_vars]  # no bounds on extra vars
+        cons += self._make_index_drift_constraints()
+
         result = minimize(
             self._score,
-            self.initial_weight_guess,
+            x0,
             args=(
-                self.index_returns,
-                self.component_returns,
-                self.tax_coefficient,
                 ticker_indices,
-                func,
-                self.starting_portfolio,
-                [0, 0, 0, 0, 0, 0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                 starting_portfolio_weights,
                 starting_portfolio_prices,
                 starting_portfolio_nav,
@@ -230,5 +266,5 @@ class MinimizeOptimizer(IndexOptimizer):
             #  options={'eps':1e-8}
         )
 
-        minimize_weights = pd.Series(result.x, index=self.initial_weight_guess.index).sort_values()
+        minimize_weights = pd.Series(self.x_to_weights(result.x), index=self.initial_weight_guess.index).sort_values()
         return minimize_weights, result

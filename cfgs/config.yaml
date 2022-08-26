@@ -8,9 +8,9 @@ price_data_file: 'data/yf_tickers.parquet'
 max_stocks: 100 # only consider top x stocks in index (minus blacklisted tickers)
 ticker_blacklist_extra: []
 optimizer:
-  tax_coefficient: 0.7
-  max_deviation_from_true_weight: 0.03
-  max_total_diviation: 0.75
+  tax_coefficient: 0.6
+  max_deviation_from_true_weight: 0.02
+  max_total_deviation: .6
   cash_constraint: 0.95
   tracking_error_func: 'least_squared'
   lookback_days: 365

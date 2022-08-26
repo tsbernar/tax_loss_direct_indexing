@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import time
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
@@ -28,8 +29,15 @@ class DirectIndexTaxLossStrategy:
 
     def run(self) -> None:
         logger.info("Running optimization")
+        t0 = time.time()
         weights, result = self.optimizer.optimize()
+        elapsed = time.time() - t0
+        logger.info(f"Optimization took {elapsed : .2f}s")
+        if not result.success:
+            logger.critical(f"Failed optimization.. result: {result}")
         logger.info(f"Weights:\n{weights.sort_values()}")
+        logger.info(f"Total deviation from index: {abs(weights - self.index_weights).sum()}")
+        logger.info(f"Total weight: {weights.sum()}")
         desired_portfolio = Portfolio.from_weights(
             weights=weights,
             nav=self.current_portfolio.nav,
@@ -60,7 +68,7 @@ class DirectIndexTaxLossStrategy:
         latest_prices = self.price_matrix.loc[latest_date]
         to_update = {t: MarketPrice(v, latest_date.to_pydatetime()) for t, v in latest_prices.items()}
         self.current_portfolio.ticker_to_market_price.update(to_update)
-        logger.debug(f"Current portfolio: {self.current_portfolio}")
+        logger.info(f"Current portfolio: {self.current_portfolio}")
 
     def _load_ticker_blacklist(self, filename: str, config: munch.Munch) -> List[str]:
         logger.debug(f"Loading ticker blacklist from {filename}")
@@ -174,6 +182,8 @@ class DirectIndexTaxLossStrategy:
 
         cash_constraint = config.cash_constraint
         tracking_error_func = config.tracking_error_func
+        max_total_deviation = config.max_total_deviation
+
         optimizer = MinimizeOptimizer(
             index_returns=index_returns,
             component_returns=component_returns,
@@ -185,5 +195,6 @@ class DirectIndexTaxLossStrategy:
             ticker_blacklist=ticker_blacklist,
             cash_constraint=cash_constraint,
             tracking_error_func=tracking_error_func,
+            max_total_deviation=max_total_deviation,
         )
         return optimizer
