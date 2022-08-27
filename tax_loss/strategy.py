@@ -13,6 +13,7 @@ from .portfolio import MarketPrice, Portfolio
 from .trade import Side, Trade
 
 INDEX_TICKER = "IVV"
+DRY_RUN = "dry_run"
 PX_PRECISION = "0.01"
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,15 @@ class DirectIndexTaxLossStrategy:
         )
         logger.info(f"Desired trades:\n{chr(10).join(map(str,desired_trades))}")
 
-        # desired_transactions = transaction_planner(current_portfolio, desired_portfolio)
+        if DRY_RUN in self.config:
+            desired_portfolio.to_json_file(self.config[DRY_RUN].desired_portfolio_file)
+            if self.config[DRY_RUN].rotate_desired_current:
+                filename = self.config.portfolio_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
+                if ".json" in filename:  # move extension to the end
+                    filename = filename.replace(".json", "") + ".json"
+                self.current_portfolio.to_json_file(filename=filename)
+                desired_portfolio.to_json_file(filename=self.config.portfolio_file)
+
         # transaction results = gateway(desired_transactions)
         # current_portfolio = f(current_portfolio, transaction_results)
         # blacklist additions = f(transaction results)
@@ -129,6 +138,7 @@ class DirectIndexTaxLossStrategy:
 
     def _plan_transactions(self, desired_portfolio: Portfolio, current_portfolio: Portfolio) -> List[Trade]:
         logger.info("Planning transactins")
+        tax_gain = 0.0
         desired_tickers = set(desired_portfolio.ticker_to_cost_basis.keys())
         current_tickers = set(current_portfolio.ticker_to_cost_basis.keys())
         trades = []
@@ -153,6 +163,13 @@ class DirectIndexTaxLossStrategy:
             side = Side.BUY if trade_qty > 0 else Side.SELL
             trade = Trade(qty=abs(trade_qty), price=trade_px, side=side, symbol=ticker)
             trades.append(trade)
+
+            if side == Side.SELL:
+                total_basis = current_portfolio.ticker_to_cost_basis[ticker].hifo_basis(-trade_qty)
+                assert total_basis.shares == -trade_qty
+                tax_gain += float(-trade_qty) * (float(trade_px) - total_basis.price)
+
+        logger.info(f"Planned tax gain of ${tax_gain : .2f}")
 
         return trades
 

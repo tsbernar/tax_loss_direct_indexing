@@ -5,6 +5,9 @@ portfolio_file: 'data/portfolio.json'
 ticker_blacklist_file: 'data/ticker_blacklist.json'
 index_weight_file: 'data/IVV_weights.parquet'
 price_data_file: 'data/yf_tickers.parquet'
+dry_run:
+  desired_portfolio_file: 'data/desired_portfolio.json'
+  rotate_desired_current: True
 max_stocks: 100 # only consider top x stocks in index (minus blacklisted tickers)
 ticker_blacklist_extra: []
 optimizer:
