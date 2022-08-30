@@ -14,8 +14,8 @@ YF_TO_IBKR_TICKER_CORRECTION_MAP = {
 
 
 def make_url(tickers: List[str]) -> str:
-    url = BASE_URL + ",".join(tickers)
-    return urllib.parse.quote(url)
+    url = BASE_URL + ",".join(map(urllib.parse.quote, tickers))
+    return url
 
 
 def process_response(tickers: List[str], r : requests.Response, filepath: str) -> None:
