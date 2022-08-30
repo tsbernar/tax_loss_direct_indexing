@@ -23,7 +23,8 @@ TICKER_CORRECTION_MAP = {
     "GEC": "GE",
     "GE,": "GE",
     "GOOGL": "GOOG",
-    "FB": "META"
+    "FB": "META",
+    "ANTM": "ELV",  # name change on Jun 28, 2022
 }
 
 
@@ -89,7 +90,7 @@ def save_sp500_weighting_data(start_date, end_date, data_directory, ticker_corre
         if len(df):
             df = df[df.date != date]  # Drop existing data if already exists
 
-        csv = data.text[data.text.find("Ticker"):]
+        csv = data.text[data.text.find("Ticker") :]
         csv = csv[: csv.find("\n\xa0\n")]
 
         if csv:
