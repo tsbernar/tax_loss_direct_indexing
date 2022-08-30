@@ -135,26 +135,29 @@ class Portfolio:
         realized_gain = float(shares) * price - total_basis
         return realized_gain
 
-    def _generate_positions_table(self, max_rows: int, loss_sorted: bool) -> List[Dict[str, Union[str, int, float]]]:
+    def _generate_positions_table(self, max_rows: int, loss_sorted: bool) -> List[Dict[str, str]]:
         if max_rows is None:
             max_rows = len(self.ticker_to_cost_basis)
 
         table = []
         for ticker, ci in list(self.ticker_to_cost_basis.items()):
-            row: Dict[str, Union[str, float, int]] = {}
+            row: Dict[str, str] = {}
             row["ticker"] = ticker
-            row["total_shares"] = float(ci.total_shares)
+            row["total_shares"] = str(ci.total_shares)
             if ticker in self.ticker_to_market_price:
                 price = self.ticker_to_market_price[ticker].price
                 loss_basis = ci.total_loss_basis(price)
-                row["total_shares_with_loss"] = float(loss_basis.shares)
+                row["total_shares_with_loss"] = str(loss_basis.shares)
                 row["total_loss"] = f"${float(loss_basis.shares)*(price - loss_basis.price) : ,.2f}"
                 row["market_price"] = f"${price : ,.2f}"
                 row["market_value"] = f"${price*float(ci.total_shares)  : ,.2f}"
                 row["%"] = f"{price*float(ci.total_shares)/self.nav*100 : ,.2f}"
 
             table.append(row)
-        table.sort(key=lambda x: (x["total_loss"], x["%"]), reverse=True)
+        if loss_sorted:
+            table.sort(key=lambda x: (float(x["total_loss"][1:].replace(",", "")), -float(x["%"].replace(",", ""))))
+        else:
+            table.sort(key=lambda x: x["%"], reverse=True)
         return table[:max_rows]
 
     def head(self, max_rows=10, loss_sorted=True) -> str:
