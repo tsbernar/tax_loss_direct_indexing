@@ -217,17 +217,18 @@ class MinimizeOptimizer(IndexOptimizer):
         )
         times[1] += time() - t0
         times[2] += hifo_time
-        times[4] += 1
+        times[3] += 1
 
-        logger.debug(
-            f"tracking_error: {tracking_error : .4f}, "
-            f"tax_loss_harvested: {tax_loss_harvested : .4f}, "
-            f"tax score: {self.tax_coefficient*tax_loss_harvested : .4f}, "
-            f"total score: {tracking_error - self.tax_coefficient*tax_loss_harvested : .4f}, "
-            f"tracking_error_time: {times[0] : .2f}s, tax_loss_time: {times[1] : .2f}s, "
-            f"hifo_time: {times[2]: .2f}s, count: {times[4]}"
-        )
-        times[3] = time()
+        if not times[3] % 500:
+
+            logger.debug(
+                f"tracking_error: {tracking_error : .4f}, "
+                f"tax_loss_harvested: {tax_loss_harvested : .4f}, "
+                f"tax score: {self.tax_coefficient*tax_loss_harvested : .4f}, "
+                f"total score: {tracking_error - self.tax_coefficient*tax_loss_harvested : .4f}, "
+                f"tracking_error_time: {times[0] : .2f}s, tax_loss_time: {times[1] : .2f}s, "
+                f"hifo_time: {times[2]: .2f}s, count: {times[3]}"
+            )
         return tracking_error - self.tax_coefficient * tax_loss_harvested
 
     def optimize(self) -> Tuple[pd.Series, OptimizeResult]:
@@ -256,7 +257,7 @@ class MinimizeOptimizer(IndexOptimizer):
             x0,
             args=(
                 ticker_indices,
-                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
                 starting_portfolio_weights,
                 starting_portfolio_prices,
                 starting_portfolio_nav,
