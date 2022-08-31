@@ -22,11 +22,11 @@ def install(c, no_dev=False):
 @task
 def check(c, ignore_types=False):
     print("Running isort...")
-    c.run("isort tax_loss")
+    c.run("isort tax_loss scripts")
     print("Running black...")
-    c.run("black tax_loss")
+    c.run("black tax_loss scripts")
     print("Running flake8...")
-    c.run("flake8 tax_loss")
+    c.run("flake8 tax_loss scripts")
     if not ignore_types:
         print("Running mypy...")
-        c.run("mypy tax_loss")
+        c.run("mypy tax_loss scripts")

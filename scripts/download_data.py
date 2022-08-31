@@ -1,13 +1,13 @@
 import datetime
 import json
+import os
 from io import StringIO
 from time import sleep
-import os
+from typing import Optional
 
 import click
 import pandas as pd
 import requests
-from typing import Optional
 import yfinance as yf
 
 DEFAULT_START = "2022-07-01"  # first date available for IVV weights is 2006-09-29
@@ -158,7 +158,7 @@ def main(
     weight_data: bool,
 ) -> None:
     if not end_date:
-        end_date = datetime.date.today()
+        end_date = str(datetime.date.today())
 
     if weight_data:
         print(f"Downloading IVV weight data from {start_date} to {end_date}")
