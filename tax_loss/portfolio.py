@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import tabulate
 
+from .trade import Side, Trade
+
 SHARE_QUANTIZE = "0.1"  # allow trading in 10ths of shares
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,13 @@ class Portfolio:
                 pf.buy(ticker, Decimal(SHARE_QUANTIZE), price)
 
         return pf
+
+    def update(self, trades: List[Trade]) -> None:
+        for trade in trades:
+            if trade.side == Side.BUY:
+                self.buy(ticker=trade.symbol, shares=trade.qty, price=float(trade.price))
+            elif trade.side == Side.SELL:
+                self.sell(ticker=trade.symbol, shares=trade.qty, price=float(trade.price))
 
     def _from_json_file(self, filename: str) -> None:
         with open(filename) as f:
@@ -147,15 +156,18 @@ class Portfolio:
             if ticker in self.ticker_to_market_price:
                 price = self.ticker_to_market_price[ticker].price
                 loss_basis = ci.total_loss_basis(price)
+                total_basis = ci.total_basis
                 row["total_shares_with_loss"] = str(loss_basis.shares)
-                row["total_loss"] = f"${float(loss_basis.shares)*(price - loss_basis.price) : ,.2f}"
+                row["total_gain/loss"] = f"${float(total_basis.shares)*(price - total_basis.price) : ,.2f}"
                 row["market_price"] = f"${price : ,.2f}"
                 row["market_value"] = f"${price*float(ci.total_shares)  : ,.2f}"
                 row["%"] = f"{price*float(ci.total_shares)/self.nav*100 : ,.2f}"
 
             table.append(row)
         if loss_sorted:
-            table.sort(key=lambda x: (float(x["total_loss"][1:].replace(",", "")), -float(x["%"].replace(",", ""))))
+            table.sort(
+                key=lambda x: (float(x["total_gain/loss"][1:].replace(",", "")), -float(x["%"].replace(",", "")))
+            )
         else:
             table.sort(key=lambda x: x["%"], reverse=True)
         return table[:max_rows]

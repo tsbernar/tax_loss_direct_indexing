@@ -57,6 +57,8 @@ class DirectIndexTaxLossStrategy:
                 if ".json" in filename:  # move extension to the end
                     filename = filename.replace(".json", "") + ".json"
                 self.current_portfolio.to_json_file(filename=filename)
+                # for dry run, assume we can execute all trades at current prices
+                desired_portfolio.update(desired_trades)
                 desired_portfolio.to_json_file(filename=self.config.portfolio_file)
 
         # transaction results = gateway(desired_transactions)
