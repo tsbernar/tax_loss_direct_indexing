@@ -26,10 +26,13 @@ def process_response(tickers: List[str], r : requests.Response, filepath: str) -
         if ticker not in data or not len(data[ticker]):
             print(f"{ticker} not found in IBKR response!")
             continue
-        ticker_data = data[ticker][0]  # Asusume first result is right.. :/
-        ticker_data["ticker"] = ticker
-        ticker_data['conid'] = ticker_data['contracts'][0]['conid']
-        ticker_data_list.append(ticker_data)
+        for td in data[ticker]:
+            if td['contracts'][0]['isUS']:  # Assume first US result is right.. :/:
+                ticker_data = td
+                ticker_data["ticker"] = ticker
+                ticker_data['conid'] = ticker_data['contracts'][0]['conid']
+                ticker_data_list.append(ticker_data)
+                break
 
     df = pd.DataFrame(ticker_data_list)
     print(df)
