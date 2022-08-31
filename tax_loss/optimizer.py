@@ -264,7 +264,7 @@ class MinimizeOptimizer(IndexOptimizer):
             ),
             bounds=bounds,
             constraints=cons,
-            options={"maxiter": 200}  # double the default max
+            options={"maxiter": 400}  # 4x the default max
             #  options={'eps':1e-8}
         )
 
