@@ -1,8 +1,11 @@
 import enum
 import time
+import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Optional
+
+import pandas as pd
 
 
 class Side(enum.Enum):
@@ -18,11 +21,14 @@ class Trade:
     price: Decimal
     side: Side
     exchange_symbol: Optional[str] = None
-    create_ts: int = field(init=False)
-    exchange_ts: Optional[int] = None
+    create_ts: pd.Timestamp = field(init=False)
+    exchange_ts: Optional[pd.Timestamp] = None
+    exchange_trade_id: Optional[str] = None
+    order_id: Optional[str] = None
+    id: str = str(uuid.uuid4())
 
     def __post_init__(self):
-        self.create_ts = time.time_ns()
+        self.create_ts = pd.Timestamp.now(tz="America/Chicago")  # TODO: should be in config
 
 
 class OrderStatus(enum.Enum):
@@ -30,6 +36,7 @@ class OrderStatus(enum.Enum):
     INSERT_PENDING = enum.auto()
     INSERT_FAILED = enum.auto()
     OPEN = enum.auto()
+    PENDING_SUBMIT = enum.auto()
     CANCEL_PENDING = enum.auto()
     CANCELLED = enum.auto()
 
@@ -42,14 +49,17 @@ class FillStatus(enum.Enum):
 
 @dataclass
 class Order:
+    symbol: str
     qty: Decimal
     price: Decimal
-    symbol: str
+    side: Side
     exchange_symbol: Optional[str]
     status: OrderStatus
     fill_status: FillStatus
     create_ts: int = field(init=False)
     exchange_ts: Optional[int] = None
+    exchange_order_id: Optional[str] = None
+    id: str = str(uuid.uuid4())
 
     def __post_init__(self):
         self.create_ts = time.time_ns()
