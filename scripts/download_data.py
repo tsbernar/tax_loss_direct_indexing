@@ -3,7 +3,7 @@ import json
 import os
 from io import StringIO
 from time import sleep
-from typing import Optional
+from typing import Optional, List
 
 import click
 import pandas as pd
@@ -15,16 +15,21 @@ DEFAULT_DATA_DIR = "./data"
 IVV_WEIGHTS_FILE_NAME = "IVV_weights.parquet"
 IVV_REQUESTED_DATES = "requested_dates.json"
 IVV_WEIGHTS_BASE_URL = "https://www.ishares.com/us/products/239726/ishares-core-sp-500-etf/1467271812596.ajax?fileType=csv&fileName=IVV_holdings&dataType=fund&asOfDate="  # noqa: E501
+IBKR_BASE_URL = "https://localhost:5000/v1/api/trsrv/stocks/?symbols="
 TICKER_DATA_FILE_NAME = "yf_tickers.parquet"
 EXTRA_YF_TICKERS = ["IVV"]
 
-TICKER_CORRECTION_MAP = {
+IVV_TICKER_CORRECTION_MAP = {  # To match yf
     "BRKB": "BRK-B",
     "GEC": "GE",
     "GE,": "GE",
     "GOOGL": "GOOG",
     "FB": "META",
     "ANTM": "ELV",  # name change on Jun 28, 2022
+}
+
+YF_TICKER_CORRECTION_MAP = {  # To match IBKR
+    "BRK-B": "BRK B",
 }
 
 
@@ -137,11 +142,50 @@ def save_yf_data(start_date, end_date, tickers, filepath):
     min_days_valid_data = min(50, int(len(price_matrix) / 2))
     price_matrix = price_matrix.dropna(axis=1, thresh=min_days_valid_data).sort_index()
 
-    df = concat_or_update(df, price_matrix)
+    price_matrix.rename(YF_TICKER_CORRECTION_MAP, axis=1)
+    df.rename(YF_TICKER_CORRECTION_MAP, axis=1)
 
+    df = concat_or_update(df, price_matrix)
     df.to_parquet(filename, compression="GZIP")
 
     return price_matrix
+
+
+def make_ibkr_url(tickers: List[str]) -> str:
+    url = IBKR_BASE_URL + ",".join(map(urllib.parse.quote, tickers))
+    return url
+
+
+def process_ibkr_response(tickers: List[str], r: requests.Response, filepath: str) -> None:
+    data = r.json()
+
+    ticker_data_list = []
+    for ticker in tickers:
+        if ticker not in data or not len(data[ticker]):
+            print(f"{ticker} not found in IBKR response!")
+            continue
+        for td in data[ticker]:
+            if td["contracts"][0]["isUS"]:  # Assume first US result is right.. :/
+                ticker_data = td
+                ticker_data["ticker"] = ticker
+                ticker_data["conid"] = ticker_data["contracts"][0]["conid"]
+                ticker_data_list.append(ticker_data)
+                break
+
+    df = pd.DataFrame(ticker_data_list)
+    print(df)
+    df.to_parquet(filepath + "/" + "IBKR_conids")
+
+
+def save_ibkr_conids(filepath):
+    df = pd.read_parquet(filepath + "/" + TICKER_DATA_FILE_NAME)
+    tickers: List[str] = list(df.columns)
+    url = make_ibkr_url(tickers)
+    r = requests.post(url, verify=False)
+    if r.status_code != 200:
+        print(f"Error {r}: {r.text}")
+        exit()
+    process_ibkr_response(tickers, r, filepath)
 
 
 @click.command()
@@ -150,19 +194,21 @@ def save_yf_data(start_date, end_date, tickers, filepath):
 @click.option("--end_date", type=str)
 @click.option("--ticker_data", is_flag=True)
 @click.option("--weight_data", is_flag=True)
+@click.option("--conids", is_flag=True)
 def main(
     filepath: str,
     start_date: str,
     end_date: Optional[str],
     ticker_data: bool,
     weight_data: bool,
+    conids: bool,
 ) -> None:
     if not end_date:
         end_date = str(datetime.date.today())
 
     if weight_data:
         print(f"Downloading IVV weight data from {start_date} to {end_date}")
-        save_sp500_weighting_data(start_date, end_date, filepath, TICKER_CORRECTION_MAP)
+        save_sp500_weighting_data(start_date, end_date, filepath, IVV_TICKER_CORRECTION_MAP)
 
     if ticker_data:
         print(f"Downloading ticker data from {start_date} to {end_date}")
@@ -173,6 +219,10 @@ def main(
             tickers += list(df.Ticker.unique())
         print(f"Downloading ticker data for {len(tickers)} tickers")
         save_yf_data(start_date, end_date, tickers, filepath)
+
+    if conids:
+        print("Downloading IBKR conids")
+        save_ibkr_conids(filepath)
 
 
 if __name__ == "__main__":
