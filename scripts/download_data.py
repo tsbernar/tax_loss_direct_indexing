@@ -11,7 +11,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-DEFAULT_START = "2022-07-01"  # first date available for IVV weights is 2006-09-29
+DEFAULT_START_DAYS = 100  # first date available for IVV weights is 2006-09-29
 DEFAULT_DATA_DIR = "./data"
 IVV_WEIGHTS_FILE_NAME = "IVV_weights.parquet"
 IVV_REQUESTED_DATES = "requested_dates.json"
@@ -143,8 +143,8 @@ def save_yf_data(start_date, end_date, tickers, filepath):
     min_days_valid_data = min(50, int(len(price_matrix) / 2))
     price_matrix = price_matrix.dropna(axis=1, thresh=min_days_valid_data).sort_index()
 
-    price_matrix.rename(YF_TICKER_CORRECTION_MAP, axis=1)
-    df.rename(YF_TICKER_CORRECTION_MAP, axis=1)
+    price_matrix = price_matrix.rename(YF_TICKER_CORRECTION_MAP, axis=1)
+    df = df.rename(YF_TICKER_CORRECTION_MAP, axis=1)
 
     df = concat_or_update(df, price_matrix)
     df.to_parquet(filename, compression="GZIP")
@@ -191,11 +191,12 @@ def save_ibkr_conids(filepath):
 
 @click.command()
 @click.option("--filepath", default=DEFAULT_DATA_DIR, type=str, help="Path to data directory")
-@click.option("--start_date", default=DEFAULT_START, type=str)
+@click.option("--start_date", type=str)
 @click.option("--end_date", type=str)
 @click.option("--ticker_data", is_flag=True)
 @click.option("--weight_data", is_flag=True)
 @click.option("--conids", is_flag=True)
+@click.option("--all", "all_", is_flag=True)
 def main(
     filepath: str,
     start_date: str,
@@ -203,15 +204,18 @@ def main(
     ticker_data: bool,
     weight_data: bool,
     conids: bool,
+    all_: bool,
 ) -> None:
     if not end_date:
         end_date = str(datetime.date.today())
+    if not start_date:
+        start_date = str((pd.Timestamp(end_date) - pd.Timedelta(f"{DEFAULT_START_DAYS} days")).date())
 
-    if weight_data:
+    if weight_data or all_:
         print(f"Downloading IVV weight data from {start_date} to {end_date}")
         save_sp500_weighting_data(start_date, end_date, filepath, IVV_TICKER_CORRECTION_MAP)
 
-    if ticker_data:
+    if ticker_data or all_:
         print(f"Downloading ticker data from {start_date} to {end_date}")
         tickers = EXTRA_YF_TICKERS
         ivv_weights_file = filepath + "/" + IVV_WEIGHTS_FILE_NAME
@@ -221,7 +225,7 @@ def main(
         print(f"Downloading ticker data for {len(tickers)} tickers")
         save_yf_data(start_date, end_date, tickers, filepath)
 
-    if conids:
+    if conids or all_:
         print("Downloading IBKR conids")
         save_ibkr_conids(filepath)
 
