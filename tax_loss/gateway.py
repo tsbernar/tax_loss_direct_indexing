@@ -2,6 +2,7 @@ import abc
 import datetime
 import logging
 from decimal import Decimal
+from time import sleep
 from typing import Dict, List, Optional, Sequence, Union
 
 import munch
@@ -27,11 +28,16 @@ class Gateway(abc.ABC):
     def get_trades(self) -> List[Trade]:
         pass
 
+    @abc.abstractmethod
+    def try_execute(self, desired_trades: Sequence[Trade]) -> List[Trade]:
+        pass
+
 
 class IBKRGateway(Gateway):
-    def __init__(self, credentials_filename: str):
-        self.credentials: munch.Munch = self._read_credentials(credentials_filename)
-        self.base_url = "https://localhost:5000/v1/api"  # TODO config
+    def __init__(self, config: munch.Munch):
+        self.credentials: munch.Munch = self._read_credentials(config.credentials_filename)
+        self.base_url = config.base_url
+        self.conid_filepath = config.conid_filepath
         if not self._check_auth_status():
             self._re_auth()
         self.account_id: str = self._get_account_id()
@@ -78,6 +84,22 @@ class IBKRGateway(Gateway):
         )
         return portfolio
 
+    def try_execute(self, desired_trades: Sequence[Trade]) -> List[Trade]:
+        orders = self._trades_to_orders(desired_trades)
+        if not all([o.exchange_symbol for o in orders]):
+            orders = self._add_conids(orders)
+        sent_orders = self.submit_orders(orders)
+        sent_order_ids = {o.id for o in sent_orders}
+        #  Takes a while for orders to all show up on trades.. how long?
+        logger.info("Waiting 1min before checking for trades")
+        sleep(60)
+        trades = self.get_trades()
+        my_trades = [t for t in trades if t.order_id in sent_order_ids]
+        logger.info(f"Got trades: {my_trades}")
+        if len(my_trades) != len(sent_orders):
+            logger.warn("Trade vs order count mismatch")  # maybe we get partial fills? need to handle better
+        return my_trades
+
     def submit_orders(self, orders: Sequence[Order]) -> List[Order]:
         endpoint = f"/iserver/{self.account_id}/orders"
         json_data: Dict[str, List[Dict[str, Union[str, float, int]]]] = {"orders": []}
@@ -97,6 +119,10 @@ class IBKRGateway(Gateway):
         for order_response in order_resonses:
             order = id_to_submitted_map[order_response["local_order_id"]]
             updated_orders.append(self._update_order(order, order_response))
+
+        if len(updated_orders) != len(orders):
+            logger.warn("Some orders not sent")
+
         return updated_orders
 
     def _get_cash(self) -> float:
@@ -117,6 +143,35 @@ class IBKRGateway(Gateway):
         if not response.ok:
             return False
         return response.json()["message"] == "success"
+
+    def _add_conids(self, orders: List[Order]) -> List[Order]:
+        df = pd.read_parquet(self.conid_filepath).set_index("ticker")
+        logger.debug(f"Updating conids on orders: {orders}")
+        verified_orders = []
+        for order in orders:
+            if order.symbol not in df.index:
+                logger.warn(f"No conid found for {order}.  Removing")
+                continue
+            order.exchange_symbol = df.loc[order.symbol].conid
+            verified_orders.append(order)
+        logger.debug(f"Updated conids on orders: {verified_orders}")
+        return verified_orders
+
+    @staticmethod
+    def _trades_to_orders(trades: Sequence[Trade]) -> List[Order]:
+        orders = []
+        for trade in trades:
+            order = Order(
+                symbol=trade.symbol,
+                qty=trade.qty,
+                price=trade.price,
+                side=trade.side,
+                exchange_symbol=trade.exchange_symbol,
+                status=OrderStatus.INACTIVE,
+                fill_status=FillStatus.NOT_FILLED,
+            )
+            orders.append(order)
+        return orders
 
     @staticmethod
     def _update_order(order: Order, order_resonse: Dict[str, str]) -> Order:
@@ -208,8 +263,8 @@ class IBKRGateway(Gateway):
         ibkr_order["secType"] = order.exchange_symbol + ":STK"  # only using stocks
         ibkr_order["cOID"] = int(order.id)
         # TODO config + allow for other options like limit orders at mid price eventually cross if no fill, etc.
-        ibkr_order["orderType"] = "MOC"
-        ibkr_order["tif"] = "DAY"
+        ibkr_order["orderType"] = "MKT"
+        ibkr_order["tif"] = "IOC"
         ibkr_order["side"] = "BUY" if order.side == Side.BUY else "SELL"
         ibkr_order["quantity"] = float(order.qty)
         return ibkr_order

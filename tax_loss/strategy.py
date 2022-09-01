@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Tuple
 import munch
 import pandas as pd
 
+from tax_loss.gateway import Gateway, IBKRGateway
+
 from .optimizer import IndexOptimizer, MinimizeOptimizer
 from .portfolio import MarketPrice, Portfolio
 from .trade import Side, Trade
@@ -27,6 +29,7 @@ class DirectIndexTaxLossStrategy:
         self.ticker_blacklist: List[str] = self._load_ticker_blacklist(config.ticker_blacklist_file, config)
         self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.optimizer = self._init_optimzier(config.optimizer)
+        self.gateway = self._init_gateway(config.gateway)
 
     def run(self) -> None:
         logger.info("Running optimization")
@@ -51,27 +54,39 @@ class DirectIndexTaxLossStrategy:
         )
         logger.debug(f"len desired_trades: {len(desired_trades)}")
         logger.info(f"Desired trades:\n{chr(10).join(map(str,desired_trades))}")
-
         if DRY_RUN in self.config:
-            logger.info(f"Saving desired portfolio to {self.config[DRY_RUN].desired_portfolio_file}")
-            desired_portfolio.to_json_file(self.config[DRY_RUN].desired_portfolio_file)
-            if self.config[DRY_RUN].rotate_desired_current:
-                filename = self.config.portfolio_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
-                if ".json" in filename:  # move extension to the end
-                    filename = filename.replace(".json", "") + ".json"
-                logger.info(f"Rotating last portfolio to {filename}")
-                self.current_portfolio.to_json_file(filename=filename)
-                # for dry run, assume we can execute all trades at current prices
-                logger.info("Updating portfolio with trades")
-                self.current_portfolio.update(desired_trades)
-                logger.info(f"Current portfolio: {self.current_portfolio}")
-                self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+            self._dry_run(desired_portfolio, desired_trades)
+        else:
+            executed_trades = self.gateway.try_execute(desired_trades)
+            self._rotate_current_portfolio()
+            logger.info("Updating portfolio with trades")
+            self.current_portfolio.update(executed_trades)
+            logger.info(f"Current portfolio: {self.current_portfolio}")
+            self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
 
         # transaction results = gateway(desired_transactions)
         # current_portfolio = f(current_portfolio, transaction_results)
         # blacklist additions = f(transaction results)
         # save data (current porfolio, blacklist)
         # pull IBKR pf data, sanity check vs current pf?
+
+    def _dry_run(self, desired_portfolio: Portfolio, desired_trades: List[Trade]) -> None:
+        logger.info(f"Saving desired portfolio to {self.config[DRY_RUN].desired_portfolio_file}")
+        desired_portfolio.to_json_file(self.config[DRY_RUN].desired_portfolio_file)
+        if self.config[DRY_RUN].rotate_desired_current:
+            self._rotate_current_portfolio()
+            # for dry run, assume we can execute all trades at current prices
+            logger.info("Updating portfolio with trades")
+            self.current_portfolio.update(desired_trades)
+            logger.info(f"Current portfolio: {self.current_portfolio}")
+            self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+
+    def _rotate_current_portfolio(self):
+        filename = self.config.portfolio_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
+        if ".json" in filename:  # move extension to the end
+            filename = filename.replace(".json", "") + ".json"
+        logger.info(f"Rotating last portfolio to {filename}")
+        self.current_portfolio.to_json_file(filename=filename)
 
     def _load_current_portfolio(self, filename: str) -> Portfolio:
         logger.info(f"Loading current portfolio from {filename}")
@@ -180,6 +195,11 @@ class DirectIndexTaxLossStrategy:
         logger.info(f"Planned tax gain of ${tax_gain : .2f}")
 
         return trades
+
+    def _init_gateway(self, config) -> Gateway:
+        logger.info("Initializing gateway")
+        gateway = IBKRGateway(config=config)
+        return gateway
 
     def _init_optimzier(self, config: munch.Munch) -> IndexOptimizer:
         logger.info("Initializing optimizer")

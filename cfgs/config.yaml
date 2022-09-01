@@ -17,3 +17,7 @@ optimizer:
   cash_constraint: 0.95
   tracking_error_func: 'least_squared'
   lookback_days: 365
+gateway:
+  credentials_filename: 'data/ib_creds'
+  base_url: 'https://localhost:5000/v1/api'
+  conid_filepath: 'data/IBKR_conids'
