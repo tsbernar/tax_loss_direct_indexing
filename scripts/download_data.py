@@ -1,9 +1,10 @@
 import datetime
 import json
 import os
+import urllib
 from io import StringIO
 from time import sleep
-from typing import Optional, List
+from typing import List, Optional
 
 import click
 import pandas as pd
