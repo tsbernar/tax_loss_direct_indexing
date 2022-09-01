@@ -39,6 +39,7 @@ class DirectIndexTaxLossStrategy:
         logger.info(f"Weights:\n{weights.sort_values()}")
         logger.info(f"Total deviation from index: {abs(weights - self.index_weights).sum()}")
         logger.info(f"Total weight: {weights.sum()}")
+        logger.debug(f"Current pf nav: {self.current_portfolio.nav}")
         desired_portfolio = Portfolio.from_weights(
             weights=weights,
             nav=self.current_portfolio.nav,
@@ -48,6 +49,7 @@ class DirectIndexTaxLossStrategy:
         desired_trades = self._plan_transactions(
             desired_portfolio=desired_portfolio, current_portfolio=self.current_portfolio
         )
+        logger.debug(f"len desired_trades: {len(desired_trades)}")
         logger.info(f"Desired trades:\n{chr(10).join(map(str,desired_trades))}")
 
         if DRY_RUN in self.config:
@@ -58,8 +60,8 @@ class DirectIndexTaxLossStrategy:
                     filename = filename.replace(".json", "") + ".json"
                 self.current_portfolio.to_json_file(filename=filename)
                 # for dry run, assume we can execute all trades at current prices
-                desired_portfolio.update(desired_trades)
-                desired_portfolio.to_json_file(filename=self.config.portfolio_file)
+                self.current_portfolio.update(desired_trades)
+                self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
 
         # transaction results = gateway(desired_transactions)
         # current_portfolio = f(current_portfolio, transaction_results)
