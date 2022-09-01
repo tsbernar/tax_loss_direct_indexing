@@ -67,7 +67,7 @@ class MinimizeOptimizer(IndexOptimizer):
         starting_portfolio: Portfolio,
         initial_weight_guess: pd.Series,
         max_deviation_from_true_weight: float = 0.03,
-        ticker_blacklist: Dict[str, Tuple[float, float]] = {},
+        ticker_blacklist: Dict[str, Tuple[float, float]] = None,
         cash_constraint: float = 0.95,
         tracking_error_func: str = "least_squared",
         max_total_deviation: float = 0.8,
@@ -80,7 +80,7 @@ class MinimizeOptimizer(IndexOptimizer):
         self.tax_coefficient = tax_coefficient
         self.starting_portfolio = starting_portfolio
         self.initial_weight_guess = initial_weight_guess
-        self.ticker_blacklist = ticker_blacklist
+        self.ticker_blacklist = ticker_blacklist if ticker_blacklist is not None else {}
         self.max_deviation_from_true_weight = max_deviation_from_true_weight
         self.cash_constraint = cash_constraint
         self.max_total_deviation = max_total_deviation

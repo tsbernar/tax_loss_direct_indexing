@@ -136,12 +136,12 @@ class Portfolio:
         self,
         filename: Optional[str] = None,
         cash: float = 0.0,
-        ticker_to_cost_basis: Dict[str, CostBasisInfo] = {},
-        ticker_to_market_price: Dict[str, MarketPrice] = {},
+        ticker_to_cost_basis: Optional[Dict[str, CostBasisInfo]] = None,
+        ticker_to_market_price: Optional[Dict[str, MarketPrice]] = None,
     ) -> None:
         self.cash = cash
-        self.ticker_to_cost_basis = ticker_to_cost_basis
-        self.ticker_to_market_price = ticker_to_market_price
+        self.ticker_to_cost_basis = ticker_to_cost_basis if ticker_to_cost_basis is not None else {}
+        self.ticker_to_market_price = ticker_to_market_price if ticker_to_market_price is not None else {}
         if filename:
             self._from_json_file(filename)
 
@@ -159,7 +159,8 @@ class Portfolio:
             shares = weight * nav / price
             # Round down to avoid using more than nav value
             shares = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE), rounding=ROUND_DOWN)
-            pf.buy(ticker, shares, price)
+            if shares > 0:
+                pf.buy(ticker, shares, price)
 
         # Now go back and fill in extra shares with any extra cash
         under_weight_cash = {t: (w - pf.weight(t)) * nav for t, w in weights.items() if pf.weight(t) < w}

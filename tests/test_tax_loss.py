@@ -7,7 +7,7 @@ import unittest
 
 from click.testing import CliRunner
 
-from tax_loss import cli, tax_loss
+from tax_loss import cli
 
 
 class TestTax_loss(unittest.TestCase):
