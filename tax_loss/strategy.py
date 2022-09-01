@@ -53,13 +53,16 @@ class DirectIndexTaxLossStrategy:
         logger.info(f"Desired trades:\n{chr(10).join(map(str,desired_trades))}")
 
         if DRY_RUN in self.config:
+            logger.info(f"Saving desired portfolio to {self.config[DRY_RUN].desired_portfolio_file}")
             desired_portfolio.to_json_file(self.config[DRY_RUN].desired_portfolio_file)
             if self.config[DRY_RUN].rotate_desired_current:
                 filename = self.config.portfolio_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
                 if ".json" in filename:  # move extension to the end
                     filename = filename.replace(".json", "") + ".json"
+                logger.info(f"Rotating last portfolio to {filename}")
                 self.current_portfolio.to_json_file(filename=filename)
                 # for dry run, assume we can execute all trades at current prices
+                logger.info("Updating portfolio with trades")
                 self.current_portfolio.update(desired_trades)
                 self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
 
