@@ -16,11 +16,132 @@ SHARE_QUANTIZE = "0.1"  # allow trading in 10ths of shares
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class TaxLot:
+    shares: Decimal
+    price: float
+    date: datetime.date
+
+    def __init__(
+        self,
+        shares: Union[Decimal, int, float],
+        price: float,
+        date: Optional[datetime.date] = None,
+    ):
+        # if no date provided, use today
+        self.shares = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE))
+        self.price = price
+        if not date:
+            date = datetime.date.today()
+        self.date = date
+
+
+@dataclass
+class CostBasisInfo:
+    ticker: str
+    tax_lots: List[TaxLot]
+
+    def __init__(self, ticker: str, tax_lots: List[TaxLot]) -> None:
+        self.ticker = ticker  # TODO: remove ticker from this class? simplifies json and it is redundant now
+        self.tax_lots = tax_lots
+        self.sort()
+
+    def jsonable(self) -> Dict[str, Union[str, List[Dict[str, Union[str, float]]]]]:
+        result: Dict[str, Any] = {"ticker": self.ticker}
+        result["tax_lots"] = [{"shares": str(t.shares), "price": t.price, "date": str(t.date)} for t in self.tax_lots]
+        return result
+
+    @staticmethod
+    def from_json(json_dict: Dict[str, Any]) -> "CostBasisInfo":
+        ticker = json_dict["ticker"]
+        tax_lots = [TaxLot(t["shares"], t["price"], pd.to_datetime(t["date"]).date()) for t in json_dict["tax_lots"]]
+        return CostBasisInfo(ticker, tax_lots)
+
+    @property
+    def total_basis(self) -> TaxLot:
+        total_price = 0.0
+        total_shares = Decimal("0")
+        for tax_lot in self.tax_lots:
+            total_price += float(tax_lot.shares) * tax_lot.price
+            total_shares += tax_lot.shares
+
+        return TaxLot(
+            shares=total_shares,
+            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
+        )
+
+    @property
+    def total_shares(self) -> Decimal:
+        return Decimal(sum(tl.shares for tl in self.tax_lots))
+
+    def sort(self):
+        self.tax_lots.sort(key=lambda x: x.price, reverse=True)
+
+    def total_loss_basis(self, price: float) -> TaxLot:
+        # Returns a TaxLot for all shares with a basis lower than price
+        total_price = 0.0
+        total_shares = Decimal("0.0")
+
+        for tax_lot in self.tax_lots:
+            if tax_lot.price > price:
+                total_shares += tax_lot.shares
+                total_price += float(tax_lot.shares) * tax_lot.price
+
+        return TaxLot(
+            shares=total_shares,
+            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
+        )
+
+    # TODO add FIFO, LIFO handling if needed
+    def hifo_basis(self, shares: Union[int, float, Decimal]) -> TaxLot:
+        # TODO: implementation of this bound by date (ex: hifo basis only for tax lots that count as long term gains)
+        shares_remaining = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE))
+        total_price = 0.0
+        total_shares = Decimal("0.0")
+
+        # TODO skip if sorted?
+        self.sort()
+
+        for tax_lot in self.tax_lots:
+            if shares_remaining <= 0:
+                break
+            shares_from_lot = min(tax_lot.shares, shares_remaining)
+            shares_remaining -= shares_from_lot
+            total_price += float(shares_from_lot) * tax_lot.price
+            total_shares += shares_from_lot
+
+        return TaxLot(
+            shares=total_shares,
+            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
+        )
+
+
+@dataclass
+class MarketPrice:
+    price: float
+    last_updated: datetime.datetime
+
+    @staticmethod
+    def from_json(json_dict: Dict[str, Any]) -> "MarketPrice":
+        price: float = json_dict["price"]
+        last_updated: datetime.datetime = pd.to_datetime(json_dict["last_updated"]).to_pydatetime()
+        return MarketPrice(price, last_updated)
+
+    def jsonable(self) -> Dict[str, Union[float, str]]:
+        return {"price": self.price, "last_updated": str(self.last_updated)}
+
+
 class Portfolio:
-    def __init__(self, filename=None) -> None:
-        self.cash = 0.0
-        self.ticker_to_cost_basis: Dict[str, CostBasisInfo] = {}
-        self.ticker_to_market_price: Dict[str, MarketPrice] = {}
+    def __init__(
+        self,
+        filename: Optional[str] = None,
+        cash: float = 0.0,
+        ticker_to_cost_basis: Dict[str, CostBasisInfo] = {},
+        ticker_to_market_price: Dict[str, MarketPrice] = {},
+    ) -> None:
+        self.cash = cash
+        self.ticker_to_cost_basis = ticker_to_cost_basis
+        self.ticker_to_market_price = ticker_to_market_price
         if filename:
             self._from_json_file(filename)
 
@@ -184,118 +305,3 @@ class Portfolio:
 
     def __str__(self) -> str:
         return self.head(None)
-
-
-@dataclass
-class TaxLot:
-    shares: Decimal
-    price: float
-    date: datetime.date
-
-    def __init__(
-        self,
-        shares: Union[Decimal, int, float],
-        price: float,
-        date: Optional[datetime.date] = None,
-    ):
-        # if no date provided, use today
-        self.shares = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE))
-        self.price = price
-        if not date:
-            date = datetime.date.today()
-        self.date = date
-
-
-@dataclass
-class CostBasisInfo:
-    ticker: str
-    tax_lots: List[TaxLot]
-
-    def __init__(self, ticker: str, tax_lots: List[TaxLot]) -> None:
-        self.ticker = ticker  # TODO: remove ticker from this class? simplifies json and it is redundant now
-        self.tax_lots = tax_lots
-        self.sort()
-
-    def jsonable(self) -> Dict[str, Union[str, List[Dict[str, Union[str, float]]]]]:
-        result: Dict[str, Any] = {"ticker": self.ticker}
-        result["tax_lots"] = [{"shares": str(t.shares), "price": t.price, "date": str(t.date)} for t in self.tax_lots]
-        return result
-
-    @staticmethod
-    def from_json(json_dict: Dict[str, Any]) -> "CostBasisInfo":
-        ticker = json_dict["ticker"]
-        tax_lots = [TaxLot(t["shares"], t["price"], pd.to_datetime(t["date"]).date()) for t in json_dict["tax_lots"]]
-        return CostBasisInfo(ticker, tax_lots)
-
-    @property
-    def total_basis(self) -> TaxLot:
-        total_price = 0.0
-        total_shares = Decimal("0")
-        for tax_lot in self.tax_lots:
-            total_price += float(tax_lot.shares) * tax_lot.price
-            total_shares += tax_lot.shares
-
-        return TaxLot(
-            shares=total_shares,
-            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
-        )
-
-    @property
-    def total_shares(self) -> Decimal:
-        return Decimal(sum(tl.shares for tl in self.tax_lots))
-
-    def sort(self):
-        self.tax_lots.sort(key=lambda x: x.price, reverse=True)
-
-    def total_loss_basis(self, price: float) -> TaxLot:
-        # Returns a TaxLot for all shares with a basis lower than price
-        total_price = 0.0
-        total_shares = Decimal("0.0")
-
-        for tax_lot in self.tax_lots:
-            if tax_lot.price > price:
-                total_shares += tax_lot.shares
-                total_price += float(tax_lot.shares) * tax_lot.price
-
-        return TaxLot(
-            shares=total_shares,
-            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
-        )
-
-    # TODO add FIFO, LIFO handling if needed
-    def hifo_basis(self, shares: Union[int, float, Decimal]) -> TaxLot:
-        # TODO: implementation of this bound by date (ex: hifo basis only for tax lots that count as long term gains)
-        shares_remaining = Decimal(shares).quantize(Decimal(SHARE_QUANTIZE))
-        total_price = 0.0
-        total_shares = Decimal("0.0")
-
-        # TODO skip if sorted?
-        self.sort()
-
-        for tax_lot in self.tax_lots:
-            if shares_remaining <= 0:
-                break
-            shares_from_lot = min(tax_lot.shares, shares_remaining)
-            shares_remaining -= shares_from_lot
-            total_price += float(shares_from_lot) * tax_lot.price
-            total_shares += shares_from_lot
-
-        return TaxLot(
-            shares=total_shares,
-            price=(total_price / float(total_shares)) if total_shares > 0 else 0.0,
-        )
-
-
-@dataclass
-class MarketPrice:
-    price: float
-    last_updated: datetime.datetime
-
-    @staticmethod
-    def from_json(json_dict: Dict[str, Any]) -> "MarketPrice":
-        price: float = json_dict["price"]
-        last_updated: datetime.datetime = pd.to_datetime(json_dict["last_updated"]).to_pydatetime()
-        return MarketPrice(price, last_updated)
-
-    def jsonable(self) -> Dict[str, Union[float, str]]:
-        return {"price": self.price, "last_updated": str(self.last_updated)}

@@ -1,4 +1,5 @@
 import abc
+import datetime
 import logging
 from decimal import Decimal
 from typing import Dict, List, Optional, Sequence, Union
@@ -7,7 +8,7 @@ import munch
 import pandas as pd
 import requests
 
-from .portfolio import Portfolio
+from .portfolio import CostBasisInfo, MarketPrice, Portfolio, TaxLot
 from .trade import FillStatus, Order, OrderStatus, Side, Trade
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ class IBKRGateway(Gateway):
     def __init__(self, credentials_filename: str):
         self.credentials: munch.Munch = self._read_credentials(credentials_filename)
         self.base_url = "https://localhost:5000/v1/api"  # TODO config
+        if not self._check_auth_status():
+            self._re_auth()
         self.account_id: str = self._get_account_id()
 
     @staticmethod
@@ -62,6 +65,19 @@ class IBKRGateway(Gateway):
             orders.append(self._decode_ibkr_order(ibkr_order))
         return orders
 
+    def get_current_portfolio(self) -> Portfolio:
+        self._recalc_portfolio()
+        cash = self._get_cash()
+        positions = self._get_positions()
+        # TODO this does not have full cost basis info!!!
+        ticker_to_cost_basis = {str(p["contractDesc"]): self._decode_cost_basis_info(p) for p in positions}
+        # TODO : Use market data endpoint to get update with real "last_updated" ts?
+        ticker_to_market_price = {str(p["contractDesc"]): self._decode_market_price(p) for p in positions}
+        portfolio = Portfolio(
+            cash=cash, ticker_to_cost_basis=ticker_to_cost_basis, ticker_to_market_price=ticker_to_market_price
+        )
+        return portfolio
+
     def submit_orders(self, orders: Sequence[Order]) -> List[Order]:
         endpoint = f"/iserver/{self.account_id}/orders"
         json_data: Dict[str, List[Dict[str, Union[str, float, int]]]] = {"orders": []}
@@ -83,6 +99,25 @@ class IBKRGateway(Gateway):
             updated_orders.append(self._update_order(order, order_response))
         return updated_orders
 
+    def _get_cash(self) -> float:
+        endpoint = f"/portfolio/{self.account_id}/summary"
+        response = self._make_request(method="GET", endpoint=endpoint)
+        portfolio_summary = response.json()
+        return float(portfolio_summary["availablefunds"]["amount"])
+
+    def _get_positions(self) -> List[Dict[str, Union[str, float, int]]]:
+        endpoint = f"/portfolio/{self.account_id}/positions"
+        response = self._make_request(method="GET", endpoint=endpoint)
+        positions = response.json()
+        return positions
+
+    def _recalc_portfolio(self) -> bool:
+        endpoint = f"portfolio/{self.account_id}/positions/invalidate"
+        response = self._make_request(method="POST", endpoint=endpoint)
+        if not response.ok:
+            return False
+        return response.json()["message"] == "success"
+
     @staticmethod
     def _update_order(order: Order, order_resonse: Dict[str, str]) -> Order:
         order.exchange_order_id = order_resonse["order_id"]
@@ -93,7 +128,18 @@ class IBKRGateway(Gateway):
         return order
 
     @staticmethod
-    def _decode_ibkr_order(ibkr_order: Dict[str, Union[float, int, str]]) -> Order:
+    def _decode_market_price(position: Dict[str, Union[str, float, int]]) -> MarketPrice:
+        return MarketPrice(price=float(position["mktPrice"]), last_updated=datetime.datetime.now())
+
+    @staticmethod
+    def _decode_cost_basis_info(position: Dict[str, Union[str, float, int]]) -> CostBasisInfo:
+        return CostBasisInfo(
+            ticker=str(position["contractDesc"]),
+            tax_lots=[TaxLot(shares=Decimal(position["position"]), price=float(position["mktPrice"]))],
+        )
+
+    @staticmethod
+    def _decode_ibkr_order(ibkr_order: Dict[str, Union[str, float, int]]) -> Order:
         """
         {'acct': 'DU5822420',
         'conidex': '265598',
@@ -122,6 +168,7 @@ class IBKRGateway(Gateway):
         'lastExecutionTime_r': 1661896909000,
         'side': 'BUY'}
         """
+        # TODO add a comment like this with an example for all decode funcs
         if ibkr_order["status"] == "Filled":
             status = OrderStatus.CANCELLED
             fill_status = FillStatus.FILLED
@@ -140,8 +187,8 @@ class IBKRGateway(Gateway):
 
         return Order(
             symbol=str(ibkr_order["ticker"]),
-            qty=Decimal(float(ibkr_order["remainingQuantity"]) + float(ibkr_order["filledQuantity"])),
-            price=Decimal(ibkr_order["limit_price"]) if "limit_price" in ibkr_order else Decimal(0),
+            qty=Decimal(str(float(ibkr_order["remainingQuantity"]) + float(ibkr_order["filledQuantity"]))),
+            price=Decimal(str(ibkr_order["limit_price"])) if "limit_price" in ibkr_order else Decimal(0),
             side=side,
             exchange_symbol=str(ibkr_order["conid"]),
             status=status,
@@ -178,8 +225,8 @@ class IBKRGateway(Gateway):
 
         trade = Trade(
             symbol=str(ibkr_trade["symbol"]),  # TODO map this?
-            qty=Decimal(ibkr_trade["size"]),
-            price=Decimal(ibkr_trade["price"]),
+            qty=Decimal(str(ibkr_trade["size"])),
+            price=Decimal(str(ibkr_trade["price"])),
             side=side,
             exchange_symbol=str(ibkr_trade["conid"]),
             exchange_ts=pd.Timestamp(ibkr_trade["trade_time_r"], unit="ms", tz="UTC").tz_convert("America/Chicago"),
@@ -199,9 +246,16 @@ class IBKRGateway(Gateway):
     def _check_auth_status(self) -> bool:
         endpoint = "/iserver/auth/status"
         response = self._make_request(method="POST", endpoint=endpoint)
-        if (response.ok) and (response.json()["authenticated"]):
-            return True
-        return False
+        if not response.ok:
+            return False
+        return response.json()["authenticated"]
+
+    def _re_auth(self) -> bool:
+        endpoint = "/iserver/reauthenticate"
+        response = self._make_request(method="POST", endpoint=endpoint)
+        if not response.ok:
+            return False
+        return response.json()["message"] == "triggered"
 
     def _get_account_id(self) -> str:
         endpoint = "/iserver/accounts"
