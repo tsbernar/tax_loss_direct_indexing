@@ -64,6 +64,7 @@ class DirectIndexTaxLossStrategy:
                 # for dry run, assume we can execute all trades at current prices
                 logger.info("Updating portfolio with trades")
                 self.current_portfolio.update(desired_trades)
+                logger.info("Current portfolio: {current_portfolio}")
                 self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
 
         # transaction results = gateway(desired_transactions)
