@@ -9,8 +9,8 @@ import munch
 import pandas as pd
 import requests
 
-from .portfolio import CostBasisInfo, MarketPrice, Portfolio, TaxLot
-from .trade import FillStatus, Order, OrderStatus, Side, Trade
+from tax_loss.portfolio import CostBasisInfo, MarketPrice, Portfolio, TaxLot
+from tax_loss.trade import FillStatus, Order, OrderStatus, Side, Trade
 
 logger = logging.getLogger(__name__)
 

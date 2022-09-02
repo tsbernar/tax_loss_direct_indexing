@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import tabulate
 
-from .trade import Side, Trade
+from tax_loss.trade import Side, Trade
 
 SHARE_QUANTIZE = "0.1"  # allow trading in 10ths of shares
 

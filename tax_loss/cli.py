@@ -6,7 +6,9 @@ import click
 import munch
 import yaml  # type: ignore
 
-from .strategy import DirectIndexTaxLossStrategy
+from tax_loss.strategy import DirectIndexTaxLossStrategy
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging(config):
@@ -31,7 +33,6 @@ def read_config(filepath):
 def main(config_file):
     config = read_config(config_file)
     setup_logging(config)
-    logger = logging.getLogger(__name__)
     logger.info(f"Starting app with config : \n{json.dumps(config, indent=4)}")
     strategy = DirectIndexTaxLossStrategy(config)
     strategy.run()

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import OptimizeResult, minimize
 
-from .portfolio import Portfolio
+from tax_loss.portfolio import Portfolio
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class IndexOptimizer(abc.ABC):
         self.component_returns = component_returns
 
     @abc.abstractmethod
-    def optimize(self):
+    def optimize(self) -> Tuple[pd.Series, OptimizeResult]:
         """
         Returns:
 

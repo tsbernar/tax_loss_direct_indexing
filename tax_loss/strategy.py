@@ -7,12 +7,12 @@ from typing import Dict, List, Optional, Tuple
 
 import munch
 import pandas as pd
+from scipy.optimize import OptimizeResult
 
 from tax_loss.gateway import Gateway, IBKRGateway
-
-from .optimizer import IndexOptimizer, MinimizeOptimizer
-from .portfolio import MarketPrice, Portfolio
-from .trade import Side, Trade
+from tax_loss.optimizer import IndexOptimizer, MinimizeOptimizer
+from tax_loss.portfolio import MarketPrice, Portfolio
+from tax_loss.trade import Side, Trade
 
 INDEX_TICKER = "IVV"
 DRY_RUN = "dry_run"
@@ -32,17 +32,7 @@ class DirectIndexTaxLossStrategy:
         self.gateway = self._init_gateway(config.gateway)
 
     def run(self) -> None:
-        logger.info("Running optimization")
-        t0 = time.time()
-        weights, result = self.optimizer.optimize()
-        elapsed = time.time() - t0
-        logger.info(f"Optimization took {elapsed : .2f}s")
-        if not result.success:
-            logger.critical(f"Failed optimization.. result: {result}")
-        logger.info(f"Weights:\n{weights.sort_values()}")
-        logger.info(f"Total deviation from index: {abs(weights - self.index_weights).sum()}")
-        logger.info(f"Total weight: {weights.sum()}")
-        logger.debug(f"Current pf nav: {self.current_portfolio.nav}")
+        weights, result = self._optimize()
         desired_portfolio = Portfolio.from_weights(
             weights=weights,
             nav=self.current_portfolio.nav,
@@ -52,23 +42,39 @@ class DirectIndexTaxLossStrategy:
         desired_trades = self._plan_transactions(
             desired_portfolio=desired_portfolio, current_portfolio=self.current_portfolio
         )
-        logger.debug(f"len desired_trades: {len(desired_trades)}")
-        logger.info(f"Desired trades:\n{chr(10).join(map(str,desired_trades))}")
         if DRY_RUN in self.config:
             self._dry_run(desired_portfolio, desired_trades)
         else:
-            executed_trades = self.gateway.try_execute(desired_trades)
-            self._rotate_current_portfolio()
-            logger.info("Updating portfolio with trades")
-            self.current_portfolio.update(executed_trades)
-            logger.info(f"Current portfolio: {self.current_portfolio}")
-            self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+            self._wet_run(desired_trades)
 
-        # transaction results = gateway(desired_transactions)
-        # current_portfolio = f(current_portfolio, transaction_results)
         # blacklist additions = f(transaction results)
         # save data (current porfolio, blacklist)
         # pull IBKR pf data, sanity check vs current pf?
+
+    def _optimize(self) -> Tuple[pd.Series, OptimizeResult]:
+        logger.info("Running optimization")
+        t0 = time.time()
+        weights, result = self.optimizer.optimize()
+        elapsed = time.time() - t0
+        logger.info(f"Optimization took {elapsed : .2f}s")
+
+        if not result.success:
+            logger.critical(f"Failed optimization.. result: {result}")
+
+        logger.info(f"Weights: \n{weights.sort_values()}")
+        logger.info(f"Total deviation from index: {abs(weights - self.index_weights).sum()}")
+        logger.info(f"Total weight: {weights.sum()}")
+        logger.debug(f"Current pf nav: {self.current_portfolio.nav}")
+
+        return weights, result
+
+    def _wet_run(self, desired_trades: List[Trade]) -> None:
+        executed_trades = self.gateway.try_execute(desired_trades)
+        self._rotate_current_portfolio()
+        logger.info("Updating portfolio with trades")
+        self.current_portfolio.update(executed_trades)
+        logger.info(f"Current portfolio: {self.current_portfolio}")
+        self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
 
     def _dry_run(self, desired_portfolio: Portfolio, desired_trades: List[Trade]) -> None:
         logger.info(f"Saving desired portfolio to {self.config[DRY_RUN].desired_portfolio_file}")
@@ -199,6 +205,9 @@ class DirectIndexTaxLossStrategy:
                 tax_gain += float(-trade_qty) * (float(trade_px) - total_basis.price)
 
         logger.info(f"Planned tax gain of ${tax_gain : .2f}")
+
+        logger.debug(f"len desired trades: {len(trades)}")
+        logger.info(f"Desired trades: \n{chr(10).join(map(str,trades))}")
 
         return trades
 
