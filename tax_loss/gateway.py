@@ -114,6 +114,8 @@ class IBKRGateway(Gateway):
                 logger.warn(f"Problem submitting order {order}")
                 continue
             order_response = response.json()
+            if "messageIds" in order_response[0]:
+                order_response = self._reply_question(order_response[0])
             logger.info(f"Order submission response: {order_response}")
             order_responses += order_response
 
@@ -128,6 +130,26 @@ class IBKRGateway(Gateway):
             logger.warn("Some orders not sent")
 
         return updated_orders
+
+    def _reply_question(
+        self, order_response: Dict[str, Union[str, List[str]]]
+    ) -> List[Dict[str, Union[str, List[str]]]]:
+        endpoint = "/iserver/reply/{replyid}"
+        # Sometimes you need to answer questions about a submission, ex:
+        # {'id': 'dd0227af-2de0-46fe-947d-1fd83f314e20',
+        # 'message': ['You are submitting an order without market data.
+        # We strongly recommend against this as it may result in erroneous
+        # and unexpected trades.\nAre you sure you want to submit this order?'],
+        # 'isSuppressed': False, 'messageIds': ['o354']}
+        # Always answer yes .. :/
+        responses = []
+        logger.warn(f"Question when submitting order: {order_response}, answering yes")
+        for replyid in order_response["messageIds"]:
+            endpoint = endpoint.format(replyid)
+            response = self._make_request(method="POST", endpoint=endpoint)
+            responses += response.json()
+
+        return responses
 
     def _get_cash(self) -> float:
         endpoint = f"/portfolio/{self.account_id}/summary"
