@@ -25,10 +25,12 @@ class Trade:
     exchange_ts: Optional[pd.Timestamp] = None
     exchange_trade_id: Optional[str] = None
     order_id: Optional[str] = None
-    id: str = str(uuid.uuid4())
+    id: Optional[str] = None
 
     def __post_init__(self):
         self.create_ts = pd.Timestamp.now(tz="America/Chicago")  # TODO: should be in config
+        if self.id is None:
+            self.id = str(uuid.uuid4())
 
 
 class OrderStatus(enum.Enum):
@@ -59,7 +61,9 @@ class Order:
     create_ts: int = field(init=False)
     exchange_ts: Optional[int] = None
     exchange_order_id: Optional[str] = None
-    id: str = str(uuid.uuid4())
+    id: Optional[str] = None
 
     def __post_init__(self):
         self.create_ts = time.time_ns()
+        if self.id is None:
+            self.id = str(uuid.uuid4())

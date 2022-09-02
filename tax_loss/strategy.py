@@ -139,6 +139,12 @@ class DirectIndexTaxLossStrategy:
         weights = weights / 100  # convert from % value
         weights[INDEX_TICKER] = 0
 
+        YF_TICKER_CORRECTION_MAP = {  # To match IBKR
+            "BRK-B": "BRK B",  # TODO: This is a hack, same const defined in download script.. centralize this mapping
+        }
+
+        weights = weights.rename(YF_TICKER_CORRECTION_MAP)
+
         logger.info(f"Loaded {len(weights)} index weights from {date}")
         logger.debug(weights)
         return weights

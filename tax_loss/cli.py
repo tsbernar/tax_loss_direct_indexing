@@ -17,6 +17,7 @@ def setup_logging(config):
     logging.basicConfig(filename=log_file, format=log_fmt, level=log_level, datefmt=datefmt)
     #  Stop libraries from logging too much info
     logging.getLogger("numba").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def read_config(filepath):

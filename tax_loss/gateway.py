@@ -50,7 +50,7 @@ class IBKRGateway(Gateway):
         endpoint = "/iserver/account/trades"
         response = self._make_request(method="GET", endpoint=endpoint)
         ibkr_trades = response.json()
-        logger.info("IBKR trades: {ibkr_trades}")
+        logger.info(f"IBKR trades: {ibkr_trades}")
 
         trades = []
         for ibkr_trade in ibkr_trades:
@@ -101,22 +101,26 @@ class IBKRGateway(Gateway):
         return my_trades
 
     def submit_orders(self, orders: Sequence[Order]) -> List[Order]:
-        endpoint = f"/iserver/{self.account_id}/orders"
-        json_data: Dict[str, List[Dict[str, Union[str, float, int]]]] = {"orders": []}
+        endpoint = f"/iserver/account/{self.account_id}/orders"
+        #  We still have to submit orders one at a time on this endpoint unless doing child/parent orders
+        order_responses = []
         for order in orders:
-            json_data["orders"].append(self._encode_ibkr_order(order))
+            json_data: Dict[str, List[Dict[str, Union[str, float, int]]]] = {"orders": [self._encode_ibkr_order(order)]}
 
-        logger.info("Submitting orders: {orders} as json: {json_data}")
-        response = self._make_request(method="POST", endpoint=endpoint, json_data=json_data)
-        if not response.ok:
-            logger.warn(f"Problem submitting orders {response} : {response.text}")
+            logger.info(f"Submitting order: {order} as json: {json_data}")
+            response = self._make_request(method="POST", endpoint=endpoint, json_data=json_data)
+            if not response.ok:
+                logger.warn(f"Problem submitting order {response} : {response.text}")
+                logger.warn(f"{response.request} : {response.request.url} : {str(response.request.body)}")
+                continue
+            order_response = response.json()
+            logger.info(f"Order submission response: {order_response}")
+            order_responses += order_response
 
-        order_resonses = response.json()
-        logger.info(f"Order submission response: {order_resonses}")
         id_to_submitted_map = {order.id: order for order in orders}
 
         updated_orders = []
-        for order_response in order_resonses:
+        for order_response in order_responses:
             order = id_to_submitted_map[order_response["local_order_id"]]
             updated_orders.append(self._update_order(order, order_response))
 
@@ -152,7 +156,7 @@ class IBKRGateway(Gateway):
             if order.symbol not in df.index:
                 logger.warn(f"No conid found for {order}.  Removing")
                 continue
-            order.exchange_symbol = df.loc[order.symbol].conid
+            order.exchange_symbol = str(df.loc[order.symbol].conid)
             verified_orders.append(order)
         logger.debug(f"Updated conids on orders: {verified_orders}")
         return verified_orders
@@ -259,9 +263,9 @@ class IBKRGateway(Gateway):
     def _encode_ibkr_order(order: Order) -> Dict[str, Union[str, float, int]]:
         assert order.exchange_symbol is not None
         ibkr_order: Dict[str, Union[str, float, int]] = {}
-        ibkr_order["conid"] = order.exchange_symbol
+        ibkr_order["conid"] = int(order.exchange_symbol)
         ibkr_order["secType"] = order.exchange_symbol + ":STK"  # only using stocks
-        ibkr_order["cOID"] = int(order.id)
+        ibkr_order["cOID"] = str(order.id)
         # TODO config + allow for other options like limit orders at mid price eventually cross if no fill, etc.
         ibkr_order["orderType"] = "MKT"
         ibkr_order["tif"] = "IOC"
