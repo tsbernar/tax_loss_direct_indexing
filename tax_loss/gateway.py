@@ -74,7 +74,9 @@ class IBKRGateway(Gateway):
         cash = self._get_cash()
         positions = self._get_positions()
         # TODO this does not have full cost basis info!!!
-        ticker_to_cost_basis = {str(p["contractDesc"]): self._decode_cost_basis_info(p) for p in positions}
+        ticker_to_cost_basis = {
+            str(p["contractDesc"]): self._decode_cost_basis_info(p) for p in positions if Decimal(p["position"]) != 0
+        }
         # TODO : Use market data endpoint to get update with real "last_updated" ts?
         ticker_to_market_price = {str(p["contractDesc"]): self._decode_market_price(p) for p in positions}
         portfolio = Portfolio(
@@ -186,7 +188,7 @@ class IBKRGateway(Gateway):
             order.fill_status = FillStatus.FILLED
         elif order_resonse["order_status"] == "Submitted":
             order.status = OrderStatus.ACTIVE
-            order.status = FillStatus.NOT_FILLED
+            order.fill_status = FillStatus.NOT_FILLED
         else:
             logger.warn(f"Unknown order status: { order_resonse['order_status'] }")
         return order
