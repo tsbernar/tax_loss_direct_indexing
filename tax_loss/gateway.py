@@ -319,7 +319,7 @@ class IBKRGateway(Gateway):
             exchange_symbol=str(ibkr_trade["conid"]),
             exchange_ts=pd.Timestamp(ibkr_trade["trade_time_r"], unit="ms", tz="UTC").tz_convert("America/Chicago"),
             exchange_trade_id=str(ibkr_trade["execution_id"]),
-            order_id=str(ibkr_trade["order_ref"]),
+            order_id=str(ibkr_trade["order_ref"]) if "order_ref" in ibkr_trade else None,
         )
         return trade
 

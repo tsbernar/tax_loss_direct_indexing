@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+import urllib3
 
 import click
 import munch
@@ -20,6 +21,7 @@ def setup_logging(config):
     #  Stop libraries from logging too much info
     logging.getLogger("numba").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # silance warning about no ssl verify
 
 
 def read_config(filepath):
