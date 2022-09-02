@@ -37,7 +37,7 @@ class OrderStatus(enum.Enum):
     INACTIVE = enum.auto()
     INSERT_PENDING = enum.auto()
     INSERT_FAILED = enum.auto()
-    OPEN = enum.auto()
+    ACTIVE = enum.auto()
     PENDING_SUBMIT = enum.auto()
     CANCEL_PENDING = enum.auto()
     CANCELLED = enum.auto()

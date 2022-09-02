@@ -59,10 +59,8 @@ class IBKRGateway(Gateway):
         return trades
 
     def get_orders(self) -> List[Order]:
-        endpoint = "iserver/account/orders"
+        endpoint = "/iserver/account/orders"
         response = self._make_request(method="GET", endpoint=endpoint)
-        if not response.ok:
-            logger.warn(f"Problem getting orders {response} : {response.text}")
 
         ibkr_orders = response.json()["orders"]
         logger.info(f"Get orders response: {ibkr_orders}")
@@ -94,8 +92,9 @@ class IBKRGateway(Gateway):
         logger.info("Waiting 1min before checking for trades")
         sleep(60)
         trades = self.get_trades()
+        logger.debug(f"Got trades: {trades}")
         my_trades = [t for t in trades if t.order_id in sent_order_ids]
-        logger.info(f"Got trades: {my_trades}")
+        logger.info(f"Got trades with matching IDs: {my_trades}")
         if len(my_trades) != len(sent_orders):
             logger.warn("Trade vs order count mismatch")  # maybe we get partial fills? need to handle better
         return my_trades
@@ -110,8 +109,7 @@ class IBKRGateway(Gateway):
             logger.info(f"Submitting order: {order} as json: {json_data}")
             response = self._make_request(method="POST", endpoint=endpoint, json_data=json_data)
             if not response.ok:
-                logger.warn(f"Problem submitting order {response} : {response.text}")
-                logger.warn(f"{response.request} : {response.request.url} : {str(response.request.body)}")
+                logger.warn(f"Problem submitting order {order}")
                 continue
             order_response = response.json()
             logger.info(f"Order submission response: {order_response}")
@@ -142,7 +140,7 @@ class IBKRGateway(Gateway):
         return positions
 
     def _recalc_portfolio(self) -> bool:
-        endpoint = f"portfolio/{self.account_id}/positions/invalidate"
+        endpoint = f"/portfolio/{self.account_id}/positions/invalidate"
         response = self._make_request(method="POST", endpoint=endpoint)
         if not response.ok:
             return False
@@ -182,6 +180,13 @@ class IBKRGateway(Gateway):
         order.exchange_order_id = order_resonse["order_id"]
         if order_resonse["order_status"] == "PreSubmitted":
             order.status = OrderStatus.PENDING_SUBMIT
+            order.fill_status = FillStatus.NOT_FILLED
+        elif order_resonse["order_status"] == "Filled":
+            order.status = OrderStatus.CANCELLED
+            order.fill_status = FillStatus.FILLED
+        elif order_resonse["order_status"] == "Submitted":
+            order.status = OrderStatus.ACTIVE
+            order.status = FillStatus.NOT_FILLED
         else:
             logger.warn(f"Unknown order status: { order_resonse['order_status'] }")
         return order
@@ -289,18 +294,23 @@ class IBKRGateway(Gateway):
             side=side,
             exchange_symbol=str(ibkr_trade["conid"]),
             exchange_ts=pd.Timestamp(ibkr_trade["trade_time_r"], unit="ms", tz="UTC").tz_convert("America/Chicago"),
-            exchange_trade_id=str(ibkr_trade['"execution_id"']),
+            exchange_trade_id=str(ibkr_trade["execution_id"]),
             order_id=str(ibkr_trade["order_ref"]),
         )
         return trade
 
     def _make_request(self, method: str, endpoint: str, json_data: Optional[Dict] = None) -> requests.Response:
         if method == "GET":
-            return requests.get(self.base_url + endpoint, json=json_data, verify=False)
+            response = requests.get(self.base_url + endpoint, json=json_data, verify=False)
         elif method == "POST":
-            return requests.post(self.base_url + endpoint, json=json_data, verify=False)
+            response = requests.post(self.base_url + endpoint, json=json_data, verify=False)
         else:
             raise NotImplementedError(f"Method {method}")
+
+        if not response.ok:
+            logger.warn(f"Problem with request to {endpoint}. {response} : {response.text}")
+
+        return response
 
     def _check_auth_status(self) -> bool:
         endpoint = "/iserver/auth/status"
