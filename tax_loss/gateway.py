@@ -84,15 +84,16 @@ class IBKRGateway(Gateway):
         )
         return portfolio
 
-    def try_execute(self, desired_trades: Sequence[Trade]) -> List[Trade]:
+    def try_execute(self, desired_trades: Sequence[Trade], wait: Optional[float] = 60.0) -> List[Trade]:
         orders = self._trades_to_orders(desired_trades)
         if not all([o.exchange_symbol for o in orders]):
             orders = self._add_conids(orders)
         sent_orders = self.submit_orders(orders)
         sent_order_ids = {o.id for o in sent_orders}
         #  Takes a while for orders to all show up on trades.. how long?
-        logger.info("Waiting 1min before checking for trades")
-        sleep(60)
+        logger.info(f"Waiting {wait}s before checking for trades")
+        if wait:
+            sleep(wait)
         trades = self.get_trades()
         logger.debug(f"Got trades: {trades}")
         my_trades = [t for t in trades if t.order_id in sent_order_ids]

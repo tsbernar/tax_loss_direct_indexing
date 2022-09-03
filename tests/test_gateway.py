@@ -1,11 +1,12 @@
 import json
+import time
 from decimal import Decimal
 
 import munch
 import pytest
 
 from tax_loss.gateway import IBKRGateway
-from tax_loss.trade import FillStatus, Order, OrderStatus, Side
+from tax_loss.trade import FillStatus, Order, OrderStatus, Side, Trade
 
 
 @pytest.fixture
@@ -37,6 +38,18 @@ def order():
         exchange_symbol="12345",
         status=OrderStatus.INACTIVE,
         fill_status=FillStatus.NOT_FILLED,
+    )
+    return order
+
+
+@pytest.fixture
+def trade():
+    order = Trade(
+        symbol="ABC",
+        qty=Decimal("10"),
+        price=Decimal("101.234"),
+        side=Side.BUY,
+        exchange_symbol="12345",
     )
     return order
 
@@ -121,9 +134,80 @@ def test_submit_orders(gateway, requests_mock, order):
     )
     orders = gateway.submit_orders([order])
     assert mocked.called
-    assert mocked.last_request.json()["confirmed"] == True
+    assert mocked.last_request.json()["confirmed"]
 
 
-# def test_get_current_portfolio()
+def test_get_current_portfolio(gateway, requests_mock):
+    requests_mock.post(
+        gateway.base_url + f"/portfolio/{gateway.account_id}/positions/invalidate", json={"message": "success"}
+    )
+    requests_mock.get(
+        gateway.base_url + f"/portfolio/{gateway.account_id}/summary", json={"availablefunds": {"amount": 1234.5}}
+    )
+    requests_mock.get(
+        gateway.base_url + f"/portfolio/{gateway.account_id}/positions",
+        json=[
+            {
+                "acctId": "DU5822420",
+                "conid": 265598,
+                "contractDesc": "AAPL",
+                "position": 19.1,
+                "mktPrice": 155.66999815,
+                "mktValue": 2973.3,
+                "currency": "USD",
+                "avgCost": 156.052356,
+                "avgPrice": 156.052356,
+                "realizedPnl": -271.36,
+                "unrealizedPnl": -7.3,
+                "exchs": None,
+                "expiry": None,
+                "putOrCall": None,
+                "multiplier": None,
+                "strike": 0.0,
+                "exerciseStyle": None,
+                "conExchMap": [],
+                "assetClass": "STK",
+                "undConid": 0,
+            },
+            {
+                "acctId": "DU5822420",
+                "conid": 118089500,
+                "contractDesc": "ABBV",
+                "position": 0.2,
+                "mktPrice": 136.5,
+                "mktValue": 27.3,
+                "currency": "USD",
+                "avgCost": 137.6933,
+                "avgPrice": 137.6933,
+                "realizedPnl": -2.6,
+                "unrealizedPnl": -0.24,
+                "exchs": None,
+                "expiry": None,
+                "putOrCall": None,
+                "multiplier": None,
+                "strike": 0.0,
+                "exerciseStyle": None,
+                "conExchMap": [],
+                "assetClass": "STK",
+                "undConid": 0,
+            },
+        ],
+    )
 
-# def test_get_orders()
+    portfolio = gateway.get_current_portfolio()
+    assert portfolio.ticker_to_cost_basis["ABBV"].total_shares == Decimal("0.2")
+    assert portfolio.ticker_to_market_price["ABBV"].price == 136.5
+    assert portfolio.cash == 1234.5
+
+
+def test_try_execute(gateway, requests_mock, trade, monkeypatch, order):
+    monkeypatch.setattr(gateway, "submit_orders", lambda x: [order])
+    monkeypatch.setattr(gateway, "get_trades", lambda: [trade])
+
+    def sleep(seconds):
+        pass
+
+    monkeypatch.setattr(time, "sleep", sleep)
+    trade.order_id = order.id
+    trades = gateway.try_execute([trade], wait=None)
+    assert trades == [trade]
