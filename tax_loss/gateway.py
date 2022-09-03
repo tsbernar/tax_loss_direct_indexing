@@ -98,7 +98,7 @@ class IBKRGateway(Gateway):
         my_trades = [t for t in trades if t.order_id in sent_order_ids]
         logger.info(f"Got trades with matching IDs: {my_trades}")
         if len(my_trades) != len(sent_orders):
-            logger.warn("Trade vs order count mismatch")  # maybe we get partial fills? need to handle better
+            logger.warning("Trade vs order count mismatch")  # maybe we get partial fills? need to handle better
         return my_trades
 
     def submit_orders(self, orders: Sequence[Order]) -> List[Order]:
@@ -111,7 +111,7 @@ class IBKRGateway(Gateway):
             logger.info(f"Submitting order: {order} as json: {json_data}")
             response = self._make_request(method="POST", endpoint=endpoint, json_data=json_data)
             if not response.ok:
-                logger.warn(f"Problem submitting order {order}")
+                logger.warning(f"Problem submitting order {order}")
                 continue
             order_response = response.json()
             if "messageIds" in order_response[0]:
@@ -127,7 +127,7 @@ class IBKRGateway(Gateway):
             updated_orders.append(self._update_order(order, order_response))
 
         if len(updated_orders) != len(orders):
-            logger.warn("Some orders not sent")
+            logger.warning("Some orders not sent")
 
         return updated_orders
 
@@ -143,10 +143,10 @@ class IBKRGateway(Gateway):
         # 'isSuppressed': False, 'messageIds': ['o354']}
         # Always answer yes .. :/
         responses = []
-        logger.warn(f"Question when submitting order: {order_response}, answering yes")
+        logger.warning(f"Question when submitting order: {order_response}, answering yes")
         for replyid in order_response["messageIds"]:
-            endpoint = endpoint.format(replyid)
-            response = self._make_request(method="POST", endpoint=endpoint)
+            endpoint = endpoint.format(replyid=replyid)
+            response = self._make_request(method="POST", endpoint=endpoint, json_data={"confirmed": True})
             responses += response.json()
 
         return responses
@@ -176,7 +176,7 @@ class IBKRGateway(Gateway):
         verified_orders = []
         for order in orders:
             if order.symbol not in df.index:
-                logger.warn(f"No conid found for {order}.  Removing")
+                logger.warning(f"No conid found for {order}.  Removing")
                 continue
             order.exchange_symbol = str(df.loc[order.symbol].conid)
             verified_orders.append(order)
@@ -212,7 +212,7 @@ class IBKRGateway(Gateway):
             order.status = OrderStatus.ACTIVE
             order.fill_status = FillStatus.NOT_FILLED
         else:
-            logger.warn(f"Unknown order status: { order_resonse['order_status'] }")
+            logger.warning(f"Unknown order status: { order_resonse['order_status'] }")
         return order
 
     @staticmethod
@@ -264,7 +264,7 @@ class IBKRGateway(Gateway):
             status = OrderStatus.PENDING_SUBMIT
             fill_status = FillStatus.NOT_FILLED
         else:
-            logger.warn(f"Unknown orders status {ibkr_order['status']}")
+            logger.warning(f"Unknown orders status {ibkr_order['status']}")
 
         if ibkr_order["side"] == "BUY":
             side = Side.BUY
@@ -332,7 +332,7 @@ class IBKRGateway(Gateway):
             raise NotImplementedError(f"Method {method}")
 
         if not response.ok:
-            logger.warn(f"Problem with request to {endpoint}. {response} : {response.text}")
+            logger.warning(f"Problem with request to {endpoint}. {response} : {response.text}")
 
         return response
 

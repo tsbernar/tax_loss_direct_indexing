@@ -1,10 +1,10 @@
 import json
 import logging
 import sys
-import urllib3
 
 import click
 import munch
+import urllib3
 import yaml  # type: ignore
 
 from tax_loss.strategy import DirectIndexTaxLossStrategy
