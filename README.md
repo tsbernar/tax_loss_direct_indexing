@@ -26,3 +26,10 @@ Features
 
 * TODO
 
+Running Frontend in dev
+_______
+
+1. flask --app backend/app.py run --port <port>
+2. npm start
+
+

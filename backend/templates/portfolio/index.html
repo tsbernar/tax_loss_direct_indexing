@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Portfolio{% endblock %}</h1>
+  {% if g.logged_in %}
+    {% if sorting == "loss_sorted" %}
+        <a class="action" href= {{ url_for("portfolio.index", sorting="default") }}>Default sorting</a> 
+    {% else %}
+        <a class="action" href= {{ url_for("portfolio.index", sorting="loss_sorted") }}>Loss sorted</a> 
+    {% endif %}
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if g.logged_in %} 
+
+        <div>
+        <h1>{{ "Test... " }}</h1>
+        {% for p in portfolio %}
+        <p class="mono" >{{ p | safe}}</p>
+            {% if not loop.last %}
+                <!-- <hr> -->
+            {% endif %}
+        {% endfor %}
+        </div>
+            
+    {% endif %}
+{% endblock %}
