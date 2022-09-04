@@ -10,6 +10,10 @@ dry_run:
   rotate_desired_current: True
 max_stocks: 100 # only consider top x stocks in index (minus blacklisted tickers)
 ticker_blacklist_extra: []
+database:
+  file: 'data/db.db'
+  ibkr_trades_json_table_name: 'ibkr_trades_json'
+  trades_table_name: 'trades'
 optimizer:
   tax_coefficient: 0.6
   max_deviation_from_true_weight: 0.02

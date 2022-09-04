@@ -48,16 +48,19 @@ class IBKRGateway(Gateway):
         pass
 
     def get_trades(self) -> List[Trade]:
-        endpoint = "/iserver/account/trades"
-        response = self._make_request(method="GET", endpoint=endpoint)
-        ibkr_trades = response.json()
-        logger.debug(f"IBKR trades: {ibkr_trades}")
-
+        ibkr_trades = self.get_ibkr_trades()
         trades = []
         for ibkr_trade in ibkr_trades:
             trades.append(self._decode_ibkr_trade(ibkr_trade))
 
         return trades
+
+    def get_ibkr_trades(self) -> List[Dict[str, Union[str, float]]]:
+        endpoint = "/iserver/account/trades"
+        response = self._make_request(method="GET", endpoint=endpoint)
+        ibkr_trades = response.json()
+        logger.debug(f"IBKR trades: {ibkr_trades}")
+        return ibkr_trades
 
     def get_orders(self) -> List[Order]:
         endpoint = "/iserver/account/orders"
@@ -375,3 +378,4 @@ class IBKRGateway(Gateway):
         response = self._make_request(method="GET", endpoint=endpoint)
         logger.info(f"Got IBKR account {response.json()}")
         return response.json()["accounts"][0]
+
