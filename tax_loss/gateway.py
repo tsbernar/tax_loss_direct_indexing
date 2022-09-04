@@ -11,6 +11,7 @@ import requests
 
 from tax_loss.portfolio import CostBasisInfo, MarketPrice, Portfolio, TaxLot
 from tax_loss.trade import FillStatus, Order, OrderStatus, Side, Trade
+from tax_loss.util import Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class IBKRGateway(Gateway):
         endpoint = "/iserver/account/trades"
         response = self._make_request(method="GET", endpoint=endpoint)
         ibkr_trades = response.json()
-        logger.info(f"IBKR trades: {ibkr_trades}")
+        logger.debug(f"IBKR trades: {ibkr_trades}")
 
         trades = []
         for ibkr_trade in ibkr_trades:
@@ -85,6 +86,9 @@ class IBKRGateway(Gateway):
         return portfolio
 
     def try_execute(self, desired_trades: Sequence[Trade], wait: Optional[float] = 60.0) -> List[Trade]:
+        if not self.check_if_market_open():
+            logger.warning("Market appears closed, skipping execute")
+            return []
         orders = self._trades_to_orders(desired_trades)
         if not all([o.exchange_symbol for o in orders]):
             orders = self._add_conids(orders)
@@ -132,6 +136,20 @@ class IBKRGateway(Gateway):
 
         return updated_orders
 
+    def check_if_market_open(self) -> bool:
+        #  https://www.interactivebrokers.com/api/doc.html#tag/Contract/paths/~1trsrv~1secdef~1schedule/get
+        #  Hacky solution.. use AAPL on NASDAQ as a proxy
+        #  Try to figure out if today is open from schedule
+        endpoint = "/trsrv/secdef/schedule?assetClass=STK&symbol=AAPL&exchangeFilter=NASDAQ"
+        response = self._make_request(method="GET", endpoint=endpoint)
+        logger.info(f"Got trading schedule {response.json()}")
+        schedule = Schedule(response.json()[0]["schedules"])
+        return schedule.is_open(
+            pd.Timestamp(datetime.datetime.now()).tz_localize(
+                "America/Chicago"
+            )  # Use datetime.now() so this plays nicely with freezegun for unit tests
+        )  # TODO timezones in config
+
     def _reply_question(
         self, order_response: Dict[str, Union[str, List[str]]]
     ) -> List[Dict[str, Union[str, List[str]]]]:
@@ -156,7 +174,7 @@ class IBKRGateway(Gateway):
         endpoint = f"/portfolio/{self.account_id}/summary"
         response = self._make_request(method="GET", endpoint=endpoint)
         portfolio_summary = response.json()
-        return float(portfolio_summary["availablefunds"]["amount"])
+        return float(portfolio_summary["totalcashvalue"]["amount"])
 
     def _get_positions(self) -> List[Dict[str, Union[str, float, int]]]:
         endpoint = f"/portfolio/{self.account_id}/positions"
@@ -317,6 +335,7 @@ class IBKRGateway(Gateway):
             qty=Decimal(str(ibkr_trade["size"])),
             price=Decimal(str(ibkr_trade["price"])),
             side=side,
+            fee=Decimal(str(ibkr_trade["commission"])),
             exchange_symbol=str(ibkr_trade["conid"]),
             exchange_ts=pd.Timestamp(ibkr_trade["trade_time_r"], unit="ms", tz="UTC").tz_convert("America/Chicago"),
             exchange_trade_id=str(ibkr_trade["execution_id"]),

@@ -20,6 +20,7 @@ class Trade:
     qty: Decimal
     price: Decimal
     side: Side
+    fee: Decimal = Decimal(0)
     exchange_symbol: Optional[str] = None
     create_ts: pd.Timestamp = field(init=False)
     exchange_ts: Optional[pd.Timestamp] = None

@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import munch
 import pytest
+from freezegun import freeze_time
 
 from tax_loss.gateway import IBKRGateway
 from tax_loss.trade import FillStatus, Order, OrderStatus, Side, Trade
@@ -22,10 +23,78 @@ def config():
 def gateway(config, requests_mock):
     requests_mock.post(config.base_url + "/iserver/auth/status", json={"authenticated": True})
     requests_mock.get(config.base_url + "/iserver/accounts", json={"accounts": ["1234"]})
+    requests_mock.get(
+        config.base_url + "/trsrv/secdef/schedule?assetClass=STK&symbol=AAPL&exchangeFilter=NASDAQ",
+        json=[
+            {
+                "id": "p83132",
+                "tradeVenueId": "v13200",
+                "schedules": [
+                    {
+                        "clearingCycleEndTime": "0000",
+                        "tradingScheduleDate": "20000101",
+                        "sessions": [],
+                        "tradingtimes": [{"openingTime": "0000", "closingTime": "0000", "cancelDayOrders": "N"}],
+                    },
+                    {
+                        "clearingCycleEndTime": "0000",
+                        "tradingScheduleDate": "20000102",
+                        "sessions": [],
+                        "tradingtimes": [{"openingTime": "0000", "closingTime": "0000", "cancelDayOrders": "N"}],
+                    },
+                    {
+                        "clearingCycleEndTime": "2000",
+                        "tradingScheduleDate": "20000103",
+                        "sessions": [],
+                        "tradingtimes": [
+                            {"openingTime": "0930", "closingTime": "1600", "prop": "LIQUID", "cancelDayOrders": "Y"}
+                        ],
+                    },
+                    {
+                        "clearingCycleEndTime": "2000",
+                        "tradingScheduleDate": "20000104",
+                        "sessions": [],
+                        "tradingtimes": [
+                            {"openingTime": "0930", "closingTime": "1600", "prop": "LIQUID", "cancelDayOrders": "Y"}
+                        ],
+                    },
+                    {
+                        "clearingCycleEndTime": "2000",
+                        "tradingScheduleDate": "20000105",
+                        "sessions": [],
+                        "tradingtimes": [
+                            {"openingTime": "0930", "closingTime": "1600", "prop": "LIQUID", "cancelDayOrders": "Y"}
+                        ],
+                    },
+                    {
+                        "clearingCycleEndTime": "2000",
+                        "tradingScheduleDate": "20000106",
+                        "sessions": [],
+                        "tradingtimes": [
+                            {"openingTime": "0930", "closingTime": "1600", "prop": "LIQUID", "cancelDayOrders": "Y"}
+                        ],
+                    },
+                    {
+                        "clearingCycleEndTime": "2000",
+                        "tradingScheduleDate": "20000107",
+                        "sessions": [],
+                        "tradingtimes": [
+                            {"openingTime": "0930", "closingTime": "1600", "prop": "LIQUID", "cancelDayOrders": "Y"}
+                        ],
+                    },
+                    {
+                        "clearingCycleEndTime": "0000",
+                        "tradingScheduleDate": "20220905",
+                        "sessions": [],
+                        "tradingtimes": [{"openingTime": "0000", "closingTime": "0000", "cancelDayOrders": "N"}],
+                    },
+                ],
+            }
+        ],
+    )
 
     gw = IBKRGateway(config)
     return gw
-    assert gw.account_id == "1234"
 
 
 @pytest.fixture
@@ -142,7 +211,17 @@ def test_get_current_portfolio(gateway, requests_mock):
         gateway.base_url + f"/portfolio/{gateway.account_id}/positions/invalidate", json={"message": "success"}
     )
     requests_mock.get(
-        gateway.base_url + f"/portfolio/{gateway.account_id}/summary", json={"availablefunds": {"amount": 1234.5}}
+        gateway.base_url + f"/portfolio/{gateway.account_id}/summary",
+        json={
+            "totalcashvalue": {
+                "amount": 1234.5,
+                "currency": "USD",
+                "isNull": False,
+                "timestamp": 1662251021000,
+                "value": None,
+                "severity": 0,
+            }
+        },
     )
     requests_mock.get(
         gateway.base_url + f"/portfolio/{gateway.account_id}/positions",
@@ -200,7 +279,14 @@ def test_get_current_portfolio(gateway, requests_mock):
     assert portfolio.cash == 1234.5
 
 
-def test_try_execute(gateway, requests_mock, trade, monkeypatch, order):
+def test_check_market_open(gateway):
+    with freeze_time("2022-09-06 10:00"):
+        assert gateway.check_if_market_open()
+    with freeze_time("2022-09-06 20:00"):
+        assert not gateway.check_if_market_open()
+
+
+def test_try_execute(gateway, trade, monkeypatch, order):
     monkeypatch.setattr(gateway, "submit_orders", lambda x: [order])
     monkeypatch.setattr(gateway, "get_trades", lambda: [trade])
 
@@ -209,5 +295,10 @@ def test_try_execute(gateway, requests_mock, trade, monkeypatch, order):
 
     monkeypatch.setattr(time, "sleep", sleep)
     trade.order_id = order.id
-    trades = gateway.try_execute([trade], wait=None)
-    assert trades == [trade]
+    with freeze_time("2022-09-06 10:00"):
+        trades = gateway.try_execute([trade], wait=None)
+        assert trades == [trade]
+    with freeze_time("2022-09-06 20:00"):
+        trades = gateway.try_execute([trade], wait=None)
+        assert trades == []
+

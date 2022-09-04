@@ -179,9 +179,9 @@ class Portfolio:
     def update(self, trades: List[Trade]) -> None:
         for trade in trades:
             if trade.side == Side.BUY:
-                self.buy(ticker=trade.symbol, shares=trade.qty, price=float(trade.price))
+                self.buy(ticker=trade.symbol, shares=trade.qty, price=float(trade.price), fee=float(trade.fee))
             elif trade.side == Side.SELL:
-                self.sell(ticker=trade.symbol, shares=trade.qty, price=float(trade.price))
+                self.sell(ticker=trade.symbol, shares=trade.qty, price=float(trade.price), fee=float(trade.fee))
 
     def _from_json_file(self, filename: str) -> None:
         with open(filename) as f:
@@ -234,13 +234,14 @@ class Portfolio:
             return 0
         return self.market_value(ticker) / self.nav
 
-    def buy(self, ticker: str, shares: Decimal, price: float) -> None:
+    def buy(self, ticker: str, shares: Decimal, price: float, fee: float = 0.0) -> None:
         if ticker not in self.ticker_to_cost_basis:
             self.ticker_to_cost_basis[ticker] = CostBasisInfo(ticker, [])
         self.ticker_to_cost_basis[ticker].tax_lots.append(TaxLot(shares, price))
         self.cash -= float(shares) * price
+        self.cash -= fee
 
-    def sell(self, ticker: str, shares: Decimal, price: float) -> float:
+    def sell(self, ticker: str, shares: Decimal, price: float, fee: float = 0.0) -> float:
         # returns realized gain/loss
         assert ticker in self.ticker_to_cost_basis
         assert shares <= self.ticker_to_cost_basis[ticker].total_shares
@@ -263,6 +264,7 @@ class Portfolio:
             shares_remaining = Decimal(0)
 
         self.cash += float(shares) * price
+        self.cash -= fee
         realized_gain = float(shares) * price - total_basis
         return realized_gain
 

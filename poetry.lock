@@ -316,6 +316,17 @@ python-versions = "*"
 flake8 = "*"
 
 [[package]]
+name = "freezegun"
+version = "1.2.2"
+description = "Let your Python tests travel through time"
+category = "dev"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+python-dateutil = ">=2.7"
+
+[[package]]
 name = "fsspec"
 version = "2022.8.2"
 description = "File-system specification"
@@ -1450,7 +1461,7 @@ jupyter = ["jupyter", "bokeh"]
 [metadata]
 lock-version = "1.1"
 python-versions = "~3.9"
-content-hash = "7b0fb7d7f059eea0cc45eec221965c82b745e6184d7939c2d71eddc2f1ba3c77"
+content-hash = "19f320ee4c28c370d7ce0d0fedaecc239cc105601672ca01e9bb5455e7f5eb7f"
 
 [metadata.files]
 appnope = [
@@ -1805,6 +1816,10 @@ flake8 = [
 flake8-mutable = [
     {file = "flake8-mutable-1.2.0.tar.gz", hash = "sha256:ee9b77111b867d845177bbc289d87d541445ffcc6029a0c5c65865b42b18c6a6"},
     {file = "flake8_mutable-1.2.0-py2-none-any.whl", hash = "sha256:38fd9dadcbcda6550a916197bc40ed76908119dabb37fbcca30873666c31d2d5"},
+]
+freezegun = [
+    {file = "freezegun-1.2.2-py3-none-any.whl", hash = "sha256:ea1b963b993cb9ea195adbd893a48d573fda951b0da64f60883d7e988b606c9f"},
+    {file = "freezegun-1.2.2.tar.gz", hash = "sha256:cd22d1ba06941384410cd967d8a99d5ae2442f57dfafeff2fda5de8dc5c05446"},
 ]
 fsspec = [
     {file = "fsspec-2022.8.2-py3-none-any.whl", hash = "sha256:6374804a2c0d24f225a67d009ee1eabb4046ad00c793c3f6df97e426c890a1d9"},
