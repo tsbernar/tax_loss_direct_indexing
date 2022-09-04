@@ -301,4 +301,3 @@ def test_try_execute(gateway, trade, monkeypatch, order):
     with freeze_time("2022-09-06 20:00"):
         trades = gateway.try_execute([trade], wait=None)
         assert trades == []
-
