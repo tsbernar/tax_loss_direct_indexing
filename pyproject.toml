@@ -21,6 +21,8 @@ authors = ["Trevor Bernard <trevor.s.bernard@gmail.com>"]
 
 [tool.poetry.scripts]
 tax_loss = "tax_loss.cli:main"
+add_trades_to_db = "scripts.add_trades_to_db:main"
+download_data = "scripts.download_data:main"
 
 [tool.poetry.dependencies]
 python = "~3.9"
