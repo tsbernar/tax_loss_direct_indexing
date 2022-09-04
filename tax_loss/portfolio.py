@@ -293,7 +293,7 @@ class Portfolio:
                 key=lambda x: (float(x["total_gain/loss"][1:].replace(",", "")), -float(x["%"].replace(",", "")))
             )
         else:
-            table.sort(key=lambda x: x["%"], reverse=True)
+            table.sort(key=lambda x: float(x["%"].replace(",", "")), reverse=True)
         return table[:max_rows]
 
     def head(self, max_rows=10, loss_sorted=True) -> str:
