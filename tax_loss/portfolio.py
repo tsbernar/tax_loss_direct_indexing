@@ -147,7 +147,7 @@ class Portfolio:
 
     @classmethod
     def from_weights(
-        cls, weights: pd.Series, nav: float, ticker_to_market_price: Dict[str, "MarketPrice"]
+        cls, weights: pd.Series, nav: float, ticker_to_market_price: Dict[str, "MarketPrice"], blacklist: List[str]
     ) -> "Portfolio":
         logger.info(f"Constructing portfolio from weights:\n{weights.sort_values()}")
         assert weights.sum() <= 1.0 + 1e-6  # allow for some floating point errors
@@ -170,6 +170,8 @@ class Portfolio:
         }
 
         for ticker, after_buy in sorted(after_buy.items(), key=lambda x: x[1]):
+            if ticker in blacklist:
+                continue
             price = pf.ticker_to_market_price[ticker].price
             if price * float(SHARE_QUANTIZE) < pf.cash:
                 pf.buy(ticker, Decimal(SHARE_QUANTIZE), price)

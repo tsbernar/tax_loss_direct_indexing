@@ -39,6 +39,7 @@ class DirectIndexTaxLossStrategy:
             weights=weights,
             nav=self.current_portfolio.nav,
             ticker_to_market_price=self.current_portfolio.ticker_to_market_price,
+            blacklist=list(self.ticker_blacklist.keys()),
         )
         logger.info(f"Desired portfolio:\n{desired_portfolio}")
         desired_trades = self._plan_transactions(
@@ -113,7 +114,7 @@ class DirectIndexTaxLossStrategy:
         logger.info(f"Updating blacklist with {len(executed_trades)} trades")
         end_date = (pd.Timestamp.now() + pd.Timedelta(f"{self.config.wash_sale_days} days")).date()
         for trade in executed_trades:
-            if trade.Side != Side.SELL:
+            if trade.side != Side.SELL:
                 continue
             if trade.symbol not in self.ticker_blacklist:
                 self.ticker_blacklist[trade.symbol] = end_date
@@ -136,7 +137,7 @@ class DirectIndexTaxLossStrategy:
         for ticker, expiry_str in ticker_to_expiry.items():
             if expiry_str is None:
                 ticker_blacklist[ticker] = None
-            elif pd.to_datetime(expiry_str).date() < datetime.date.today():
+            elif pd.to_datetime(expiry_str).date() > datetime.date.today():
                 ticker_blacklist[ticker] = pd.to_datetime(expiry_str).date()
 
         logger.info(f"Adding extra ticker blacklist from config: {config.ticker_blacklist_extra}")
@@ -216,6 +217,9 @@ class DirectIndexTaxLossStrategy:
             trade_px = trade_px.quantize(Decimal(PX_PRECISION))
             side = Side.BUY if trade_qty > 0 else Side.SELL
             trade = Trade(qty=abs(trade_qty), price=trade_px, side=side, symbol=ticker)
+            if trade.symbol in self.ticker_blacklist and trade.side == Side.BUY:
+                logger.warning("Skipping desired trade {trade} because of blacklist")
+                continue
             trades.append(trade)
 
             if side == Side.SELL:
@@ -224,7 +228,6 @@ class DirectIndexTaxLossStrategy:
                 tax_gain += float(-trade_qty) * (float(trade_px) - total_basis.price)
 
         logger.info(f"Planned tax gain of ${tax_gain : .2f}")
-
         logger.debug(f"len desired trades: {len(trades)}")
         logger.info(f"Desired trades: \n{chr(10).join(map(str,trades))}")
 

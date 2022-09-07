@@ -677,6 +677,19 @@ optional = true
 python-versions = "*"
 
 [[package]]
+name = "mock"
+version = "4.0.3"
+description = "Rolling backport of unittest.mock for all Pythons"
+category = "dev"
+optional = false
+python-versions = ">=3.6"
+
+[package.extras]
+build = ["twine", "wheel", "blurb"]
+docs = ["sphinx"]
+test = ["pytest (<5.4)", "pytest-cov"]
+
+[[package]]
 name = "multitasking"
 version = "0.0.11"
 description = "Non-blocking Python methods using decorators"
@@ -1357,6 +1370,14 @@ python-versions = ">=3.7"
 test = ["pre-commit", "pytest"]
 
 [[package]]
+name = "types-mock"
+version = "4.0.15"
+description = "Typing stubs for mock"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "types-requests"
 version = "2.28.9"
 description = "Typing stubs for requests"
@@ -1461,7 +1482,7 @@ jupyter = ["jupyter", "bokeh"]
 [metadata]
 lock-version = "1.1"
 python-versions = "~3.9"
-content-hash = "19f320ee4c28c370d7ce0d0fedaecc239cc105601672ca01e9bb5455e7f5eb7f"
+content-hash = "e04679d34dc87c64a72f5ddf3da5d5b7c40ffe6b06368c9840d42a47fde9caf1"
 
 [metadata.files]
 appnope = [
@@ -2021,6 +2042,10 @@ mistune = [
     {file = "mistune-2.0.4-py2.py3-none-any.whl", hash = "sha256:182cc5ee6f8ed1b807de6b7bb50155df7b66495412836b9a74c8fbdfc75fe36d"},
     {file = "mistune-2.0.4.tar.gz", hash = "sha256:9ee0a66053e2267aba772c71e06891fa8f1af6d4b01d5e84e267b4570d4d9808"},
 ]
+mock = [
+    {file = "mock-4.0.3-py3-none-any.whl", hash = "sha256:122fcb64ee37cfad5b3f48d7a7d51875d7031aaf3d8be7c42e2bee25044eee62"},
+    {file = "mock-4.0.3.tar.gz", hash = "sha256:7d3fbbde18228f4ff2f1f119a45cdffa458b4c0dee32eb4d2bb2f82554bac7bc"},
+]
 multitasking = []
 munch = [
     {file = "munch-2.5.0-py2.py3-none-any.whl", hash = "sha256:6f44af89a2ce4ed04ff8de41f70b226b984db10a91dcc7b9ac2efc1c77022fdd"},
@@ -2529,6 +2554,10 @@ tornado = [
 traitlets = [
     {file = "traitlets-5.3.0-py3-none-any.whl", hash = "sha256:65fa18961659635933100db8ca120ef6220555286949774b9cfc106f941d1c7a"},
     {file = "traitlets-5.3.0.tar.gz", hash = "sha256:0bb9f1f9f017aa8ec187d8b1b2a7a6626a2a1d877116baba52a129bfa124f8e2"},
+]
+types-mock = [
+    {file = "types-mock-4.0.15.tar.gz", hash = "sha256:a849bc2d966063f4946013bf404822ee2b96f77a8dccda4174b70ab61c5293fe"},
+    {file = "types_mock-4.0.15-py3-none-any.whl", hash = "sha256:4535fbb3912b88a247d43cdb41db0c8b2e187138986f6f01a989717e56105848"},
 ]
 types-requests = [
     {file = "types-requests-2.28.9.tar.gz", hash = "sha256:feaf581bd580497a47fe845d506fa3b91b484cf706ff27774e87659837de9962"},
