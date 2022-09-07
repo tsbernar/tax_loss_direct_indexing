@@ -11,7 +11,7 @@ from scipy.optimize import OptimizeResult
 
 from tax_loss.gateway import Gateway, IBKRGateway
 from tax_loss.optimizer import IndexOptimizer, MinimizeOptimizer
-from tax_loss.portfolio import MarketPrice, Portfolio
+from tax_loss.portfolio import Portfolio
 from tax_loss.trade import Side, Trade
 
 INDEX_TICKER = "IVV"
@@ -102,10 +102,8 @@ class DirectIndexTaxLossStrategy:
 
     def _update_market_prices(self) -> None:
         logger.debug("Updating market prices")
-        latest_date: pd.Timestamp = self.price_matrix.index.max()  # TODO : update with IBKR live prices
-        latest_prices = self.price_matrix.loc[latest_date]
-        to_update = {t: MarketPrice(v, latest_date.to_pydatetime()) for t, v in latest_prices.items()}
-        self.current_portfolio.ticker_to_market_price.update(to_update)
+        latest_prices = self.gateway.get_market_prices()
+        self.current_portfolio.ticker_to_market_price.update(latest_prices)
         logger.info(f"Current portfolio: {self.current_portfolio}")
 
     def _load_ticker_blacklist(self, filename: str, config: munch.Munch) -> List[str]:

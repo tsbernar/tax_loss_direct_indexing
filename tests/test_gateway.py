@@ -3,10 +3,12 @@ import time
 from decimal import Decimal
 
 import munch
+import pandas as pd
 import pytest
 from freezegun import freeze_time
 
 from tax_loss.gateway import IBKRGateway
+from tax_loss.portfolio import MarketPrice
 from tax_loss.trade import FillStatus, Order, OrderStatus, Side, Trade
 
 
@@ -20,7 +22,7 @@ def config():
 
 
 @pytest.fixture
-def gateway(config, requests_mock):
+def gateway(config, requests_mock, monkeypatch):
     requests_mock.post(config.base_url + "/iserver/auth/status", json={"authenticated": True})
     requests_mock.get(config.base_url + "/iserver/accounts", json={"accounts": ["1234"]})
     requests_mock.get(
@@ -92,7 +94,7 @@ def gateway(config, requests_mock):
             }
         ],
     )
-
+    monkeypatch.setattr(IBKRGateway, "_get_conids", lambda x: {"ABC": "123", "XYZ": "456"})
     gw = IBKRGateway(config)
     return gw
 
@@ -277,6 +279,67 @@ def test_get_current_portfolio(gateway, requests_mock):
     assert portfolio.ticker_to_cost_basis["ABBV"].total_shares == Decimal("0.2")
     assert portfolio.ticker_to_market_price["ABBV"].price == 136.5
     assert portfolio.cash == 1234.5
+
+
+def test_get_market_prices(gateway, requests_mock):
+    json_data = [
+        {
+            "conidEx": "1715006",
+            "conid": 123,
+            "_updated": 1662589447782,
+            "server_id": "q0",
+            "6119": "q0",
+            "31": "131.43",
+            "6509": "RivB",
+            "7635": "131.43",
+        },
+        {
+            "conidEx": "139673266",
+            "conid": 456,
+            "_updated": 1662590376596,
+            "server_id": "q1",
+            "6119": "q1",
+            "31": "13.90",
+            "6509": "RivB",
+            "7635": "13.85",
+        },
+        {
+            "conidEx": "4027",
+            "conid": 4027,
+            "_updated": 1662589447782,
+            "server_id": "q2",
+            "6119": "q2",
+            "31": "178.26",
+            "6509": "RivB",
+            "7635": "178.30",
+        },
+        {
+            "conidEx": "265598",
+            "conid": 265598,
+            "server_id": "q3",
+            "_updated": 1662590413196,
+            "6119": "q3",
+            "31": "156.08",
+            "6509": "RivB",
+            "7635": "155.97",
+        },
+    ]
+    requests_mock.get(
+        gateway.base_url + "/iserver/marketdata/snapshot?conids=123,456&fields=7635",
+        json=json_data,
+    )
+    assert gateway.get_market_prices() == {
+        "ABC": MarketPrice(131.43, pd.to_datetime(1662589447782, unit="ms").to_pydatetime()),
+        "XYZ": MarketPrice(13.85, pd.to_datetime(1662590376596, unit="ms").to_pydatetime()),
+    }
+
+    requests_mock.get(
+        gateway.base_url + "/iserver/marketdata/snapshot?conids=123&fields=7635",
+        json=json_data[:1],
+    )
+    assert gateway.get_market_prices(["ABC"]) == {
+        "ABC": MarketPrice(131.43, pd.to_datetime(1662589447782, unit="ms").to_pydatetime())
+    }
 
 
 def test_check_market_open(gateway):

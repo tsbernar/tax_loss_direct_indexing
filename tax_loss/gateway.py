@@ -3,7 +3,7 @@ import datetime
 import logging
 from decimal import Decimal
 from time import sleep
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Set, Union
 
 import munch
 import pandas as pd
@@ -14,6 +14,8 @@ from tax_loss.trade import FillStatus, Order, OrderStatus, Side, Trade
 from tax_loss.util import Schedule
 
 logger = logging.getLogger(__name__)
+
+MARK_PRICE_FIELD = "7635"
 
 
 class Gateway(abc.ABC):
@@ -33,6 +35,10 @@ class Gateway(abc.ABC):
     def try_execute(self, desired_trades: Sequence[Trade]) -> List[Trade]:
         pass
 
+    @abc.abstractmethod
+    def get_market_prices(self, tickers: Optional[Sequence[str]] = None) -> Dict[str, MarketPrice]:
+        pass
+
 
 class IBKRGateway(Gateway):
     def __init__(self, config: munch.Munch):
@@ -42,6 +48,7 @@ class IBKRGateway(Gateway):
         if not self._check_auth_status():
             self._re_auth()
         self.account_id: str = self._get_account_id()
+        self.symbol_to_conid = self._get_conids()
 
     @staticmethod
     def _read_credentials(credentials_filename: str) -> munch.Munch:
@@ -94,7 +101,7 @@ class IBKRGateway(Gateway):
             return []
         orders = self._trades_to_orders(desired_trades)
         if not all([o.exchange_symbol for o in orders]):
-            orders = self._add_conids(orders)
+            orders = self._add_conids_to_orders(orders)
         sent_orders = self.submit_orders(orders)
         sent_order_ids = {o.id for o in sent_orders}
         #  Takes a while for orders to all show up on trades.. how long?
@@ -108,6 +115,40 @@ class IBKRGateway(Gateway):
         if len(my_trades) != len(sent_orders):
             logger.warning("Trade vs order count mismatch")  # maybe we get partial fills? need to handle better
         return my_trades
+
+    def get_market_prices(self, tickers: Optional[Sequence[str]] = None) -> Dict[str, MarketPrice]:
+        endpoint = "/iserver/marketdata/snapshot?conids={conids}&fields={MARK_PRICE_FIELD}"
+        if tickers is None:
+            tickers = list(self.symbol_to_conid.keys())
+        logger.info("Requesting market prices for {tickers}")
+
+        conids_remaining = set()
+        for t in tickers:
+            if t not in self.symbol_to_conid:
+                logger.warning("No conid found for {t}, skipping.")
+                continue
+            conids_remaining.add(self.symbol_to_conid[t])
+
+        endpoint = endpoint.format(conids=",".join(sorted(conids_remaining)), MARK_PRICE_FIELD=MARK_PRICE_FIELD)
+        result: Dict[str, MarketPrice] = {}
+        conid_to_symbol = {c: s for s, c in self.symbol_to_conid.items()}
+        requests = 0
+        while conids_remaining:
+            #  "To receive all available fields the /snapshot endpoint will need to be called several times"
+            #  https://www.interactivebrokers.com/api/doc.html#tag/Market-Data/paths/~1iserver~1marketdata~1snapshot/get
+            response = self._make_request(method="GET", endpoint=endpoint)
+            for snapshot in response.json():
+                self._process_market_data_snapshot(snapshot, conid_to_symbol, result, conids_remaining)
+
+            requests += 1
+            if requests >= 200:
+                logger.warning("No market price found for some symbols after 200 requests, giving up.")
+                logger.warning(f"Missing conids: {conids_remaining}")
+                logger.warning(f"Missing tickers: {[conid_to_symbol[c] for c in conids_remaining]}")
+                break
+            sleep(0.05)
+
+        return result
 
     def submit_orders(self, orders: Sequence[Order]) -> List[Order]:
         endpoint = f"/iserver/account/{self.account_id}/orders"
@@ -132,7 +173,7 @@ class IBKRGateway(Gateway):
         updated_orders = []
         for order_response in order_responses:
             if not isinstance(order_response, dict) or ("local_order_id" not in order_response):
-                logger.warn(f"Skipping order_response {order_response}")
+                logger.warning(f"Skipping order_response {order_response}")
             order = id_to_submitted_map[order_response["local_order_id"]]
             updated_orders.append(self._update_order(order, order_response))
 
@@ -201,18 +242,36 @@ class IBKRGateway(Gateway):
             return False
         return response.json()["message"] == "success"
 
-    def _add_conids(self, orders: List[Order]) -> List[Order]:
-        df = pd.read_parquet(self.conid_filepath).set_index("ticker")
+    def _add_conids_to_orders(self, orders: List[Order]) -> List[Order]:
         logger.debug(f"Updating conids on orders: {orders}")
         verified_orders = []
         for order in orders:
-            if order.symbol not in df.index:
+            if order.symbol not in self.symbol_to_conid:
                 logger.warning(f"No conid found for {order}.  Removing")
                 continue
-            order.exchange_symbol = str(df.loc[order.symbol].conid)
+            order.exchange_symbol = self.symbol_to_conid[order.symbol]
             verified_orders.append(order)
         logger.debug(f"Updated conids on orders: {verified_orders}")
         return verified_orders
+
+    @staticmethod
+    def _process_market_data_snapshot(
+        snapshot: Dict[str, Union[str, int]],
+        conid_to_symbol: Dict[str, str],
+        result: Dict[str, MarketPrice],
+        conids_remaining: Set[str],
+    ) -> None:
+        if MARK_PRICE_FIELD in snapshot:
+            conid = str(snapshot["conid"])
+            if conid not in conids_remaining:
+                return
+
+            last_updated = pd.to_datetime(snapshot["_updated"], unit="ms").to_pydatetime()
+            print(snapshot["_updated"], last_updated)
+            mark_price = float(snapshot[MARK_PRICE_FIELD])
+            symbol = conid_to_symbol[conid]
+            result[symbol] = MarketPrice(mark_price, last_updated)
+            conids_remaining.remove(conid)
 
     @staticmethod
     def _trades_to_orders(trades: Sequence[Trade]) -> List[Order]:
@@ -387,3 +446,7 @@ class IBKRGateway(Gateway):
         response = self._make_request(method="GET", endpoint=endpoint)
         logger.info(f"Got IBKR account {response.json()}")
         return response.json()["accounts"][0]
+
+    def _get_conids(self) -> Dict[str, str]:
+        df = pd.read_parquet(self.conid_filepath).set_index("ticker")
+        return dict(df.conid.astype(str))
