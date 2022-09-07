@@ -131,6 +131,8 @@ class IBKRGateway(Gateway):
 
         updated_orders = []
         for order_response in order_responses:
+            if not isinstance(order_response, dict) or ("local_order_id" not in order_response):
+                logger.warn(f"Skipping order_response {order_response}")
             order = id_to_submitted_map[order_response["local_order_id"]]
             updated_orders.append(self._update_order(order, order_response))
 
@@ -169,6 +171,13 @@ class IBKRGateway(Gateway):
         for replyid in order_response["messageIds"]:
             endpoint = endpoint.format(replyid=replyid)
             response = self._make_request(method="POST", endpoint=endpoint, json_data={"confirmed": True})
+            tries = 1
+            while not response.ok and tries <= 3:
+                tries += 1
+                sleep(1)
+                logger.info("Retrying..")
+                response = self._make_request(method="POST", endpoint=endpoint, json_data={"confirmed": True})
+
             responses += response.json()
 
         return responses
@@ -378,4 +387,3 @@ class IBKRGateway(Gateway):
         response = self._make_request(method="GET", endpoint=endpoint)
         logger.info(f"Got IBKR account {response.json()}")
         return response.json()["accounts"][0]
-
