@@ -18,7 +18,7 @@ def config():
         {
             "ticker_blacklist_extra": [],
             "price_data_file": "filename",
-            "portfolio_file": "filename",
+            "portfolio_file": "/dev/null",
             "ticker_blacklist_file": "filename",
             "max_stocks": 100,
             "index_weight_file": "filename",
