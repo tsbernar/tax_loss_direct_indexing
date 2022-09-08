@@ -32,7 +32,6 @@ class DirectIndexTaxLossStrategy:
         self.gateway = self._init_gateway(config.gateway)
         self._update_market_prices()
         self.optimizer = self._init_optimzier(config.optimizer)
-        self.gateway = self._init_gateway(config.gateway)
 
     def run(self) -> None:
         weights, result = self._optimize()
