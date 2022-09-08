@@ -147,10 +147,17 @@ class Portfolio:
 
     @classmethod
     def from_weights(
-        cls, weights: pd.Series, nav: float, ticker_to_market_price: Dict[str, "MarketPrice"], blacklist: List[str]
+        cls,
+        weights: pd.Series,
+        nav: float,
+        ticker_to_market_price: Dict[str, "MarketPrice"],
+        blacklist: Optional[List[str]] = None,
     ) -> "Portfolio":
         logger.info(f"Constructing portfolio from weights:\n{weights.sort_values()}")
         assert weights.sum() <= 1.0 + 1e-6  # allow for some floating point errors
+        if blacklist is None:
+            blacklist = []
+
         pf = cls()
         pf.cash = nav
         pf.ticker_to_market_price = deepcopy(ticker_to_market_price)
