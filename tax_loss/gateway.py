@@ -117,36 +117,17 @@ class IBKRGateway(Gateway):
         return my_trades
 
     def get_market_prices(self, tickers: Optional[Sequence[str]] = None) -> Dict[str, MarketPrice]:
-        endpoint = "/iserver/marketdata/snapshot?conids={conids}&fields={MARK_PRICE_FIELD}"
         if tickers is None:
             tickers = list(self.symbol_to_conid.keys())
-        logger.info("Requesting market prices for {tickers}")
-
-        conids_remaining = set()
-        for t in tickers:
-            if t not in self.symbol_to_conid:
-                logger.warning("No conid found for {t}, skipping.")
-                continue
-            conids_remaining.add(self.symbol_to_conid[t])
-
-        endpoint = endpoint.format(conids=",".join(sorted(conids_remaining)), MARK_PRICE_FIELD=MARK_PRICE_FIELD)
+        #  Process in chunks of 200 to avoid URL being too long
+        #  https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/414
+        start = 0
+        chunk_size = 200
         result: Dict[str, MarketPrice] = {}
-        conid_to_symbol = {c: s for s, c in self.symbol_to_conid.items()}
-        requests = 0
-        while conids_remaining:
-            #  "To receive all available fields the /snapshot endpoint will need to be called several times"
-            #  https://www.interactivebrokers.com/api/doc.html#tag/Market-Data/paths/~1iserver~1marketdata~1snapshot/get
-            response = self._make_request(method="GET", endpoint=endpoint)
-            for snapshot in response.json():
-                self._process_market_data_snapshot(snapshot, conid_to_symbol, result, conids_remaining)
 
-            requests += 1
-            if requests >= 200:
-                logger.warning("No market price found for some symbols after 200 requests, giving up.")
-                logger.warning(f"Missing conids: {conids_remaining}")
-                logger.warning(f"Missing tickers: {[conid_to_symbol[c] for c in conids_remaining]}")
-                break
-            sleep(0.05)
+        while start < len(tickers):
+            result.update(self._get_market_prices(tickers=tickers[start : start + chunk_size]))
+            start += chunk_size
 
         return result
 
@@ -195,6 +176,40 @@ class IBKRGateway(Gateway):
                 "America/Chicago"
             )  # Use datetime.now() so this plays nicely with freezegun for unit tests
         )  # TODO timezones in config
+
+    def _get_market_prices(self, tickers: Optional[Sequence[str]] = None) -> Dict[str, MarketPrice]:
+        endpoint = "/iserver/marketdata/snapshot?conids={conids}&fields={MARK_PRICE_FIELD}"
+        if tickers is None:
+            tickers = list(self.symbol_to_conid.keys())
+        logger.info("Requesting market prices for {tickers}")
+
+        conids_remaining = set()
+        for t in tickers:
+            if t not in self.symbol_to_conid:
+                logger.warning("No conid found for {t}, skipping.")
+                continue
+            conids_remaining.add(self.symbol_to_conid[t])
+
+        endpoint = endpoint.format(conids=",".join(sorted(conids_remaining)), MARK_PRICE_FIELD=MARK_PRICE_FIELD)
+        result: Dict[str, MarketPrice] = {}
+        conid_to_symbol = {c: s for s, c in self.symbol_to_conid.items()}
+        requests = 0
+        while conids_remaining:
+            #  "To receive all available fields the /snapshot endpoint will need to be called several times"
+            #  https://www.interactivebrokers.com/api/doc.html#tag/Market-Data/paths/~1iserver~1marketdata~1snapshot/get
+            response = self._make_request(method="GET", endpoint=endpoint)
+            for snapshot in response.json():
+                self._process_market_data_snapshot(snapshot, conid_to_symbol, result, conids_remaining)
+
+            requests += 1
+            if requests >= 200:
+                logger.warning("No market price found for some symbols after 200 requests, giving up.")
+                logger.warning(f"Missing conids: {conids_remaining}")
+                logger.warning(f"Missing tickers: {[conid_to_symbol[c] for c in conids_remaining]}")
+                break
+            sleep(0.05)
+
+        return result
 
     def _reply_question(
         self, order_response: Dict[str, Union[str, List[str]]]
@@ -267,7 +282,6 @@ class IBKRGateway(Gateway):
                 return
 
             last_updated = pd.to_datetime(snapshot["_updated"], unit="ms").to_pydatetime()
-            print(snapshot["_updated"], last_updated)
             mark_price = float(snapshot[MARK_PRICE_FIELD])
             symbol = conid_to_symbol[conid]
             result[symbol] = MarketPrice(mark_price, last_updated)
