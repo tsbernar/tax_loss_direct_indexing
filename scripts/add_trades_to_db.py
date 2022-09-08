@@ -16,11 +16,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def build_check_all_query(table_name: str) -> str:
-    return f"SELECT * from {table_name}"
+    return f"SELECT * FROM {table_name}"
 
 
 def build_check_query(col_name: str, value: str, table_name: str) -> str:
-    return f"SELECT {col_name} from {table_name} WHERE {col_name}='{value}' LIMIT 1"
+    return f"SELECT {col_name} FROM {table_name} WHERE {col_name}='{value}' LIMIT 1"
 
 
 def build_insert_ibkr_statement(table_name: str) -> str:

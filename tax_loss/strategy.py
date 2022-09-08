@@ -25,10 +25,12 @@ class DirectIndexTaxLossStrategy:
         self.config = config
         self.price_matrix = self._load_yf_prices(config.price_data_file, config.optimizer.lookback_days)
         self.current_portfolio = self._load_current_portfolio(config.portfolio_file)
+        self.ticker_blacklist: Dict[str, Optional[datetime.date]] = self._load_ticker_blacklist(
+            config.ticker_blacklist_file, config
+        )
+        self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.gateway = self._init_gateway(config.gateway)
         self._update_market_prices()
-        self.ticker_blacklist: List[str] = self._load_ticker_blacklist(config.ticker_blacklist_file, config)
-        self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.optimizer = self._init_optimzier(config.optimizer)
 
     def run(self) -> None:
@@ -37,18 +39,18 @@ class DirectIndexTaxLossStrategy:
             weights=weights,
             nav=self.current_portfolio.nav,
             ticker_to_market_price=self.current_portfolio.ticker_to_market_price,
+            blacklist=list(self.ticker_blacklist.keys()),
         )
         logger.info(f"Desired portfolio:\n{desired_portfolio}")
         desired_trades = self._plan_transactions(
             desired_portfolio=desired_portfolio, current_portfolio=self.current_portfolio
         )
         if DRY_RUN in self.config:
-            self._dry_run(desired_portfolio, desired_trades)
+            executed_trades = self._dry_run(desired_portfolio, desired_trades)
         else:
-            self._wet_run(desired_trades)
+            executed_trades = self._wet_run(desired_trades)
 
-        # blacklist additions = f(transaction results)
-        # save data (current porfolio, blacklist)
+        self._update_and_cache_blacklist(executed_trades)
         # pull IBKR pf data, sanity check vs current pf?
 
     def _optimize(self) -> Tuple[pd.Series, OptimizeResult]:
@@ -68,15 +70,16 @@ class DirectIndexTaxLossStrategy:
 
         return weights, result
 
-    def _wet_run(self, desired_trades: List[Trade]) -> None:
+    def _wet_run(self, desired_trades: List[Trade]) -> List[Trade]:
         executed_trades = self.gateway.try_execute(desired_trades)
         self._rotate_current_portfolio()
         logger.info("Updating portfolio with trades")
         self.current_portfolio.update(executed_trades)
         logger.info(f"Current portfolio: {self.current_portfolio}")
         self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+        return executed_trades
 
-    def _dry_run(self, desired_portfolio: Portfolio, desired_trades: List[Trade]) -> None:
+    def _dry_run(self, desired_portfolio: Portfolio, desired_trades: List[Trade]) -> List[Trade]:
         logger.info(f"Saving desired portfolio to {self.config[DRY_RUN].desired_portfolio_file}")
         desired_portfolio.to_json_file(self.config[DRY_RUN].desired_portfolio_file)
         if self.config[DRY_RUN].rotate_desired_current:
@@ -86,6 +89,7 @@ class DirectIndexTaxLossStrategy:
             self.current_portfolio.update(desired_trades)
             logger.info(f"Current portfolio: {self.current_portfolio}")
             self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+        return desired_trades
 
     def _rotate_current_portfolio(self):
         filename = self.config.portfolio_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
@@ -102,24 +106,42 @@ class DirectIndexTaxLossStrategy:
 
     def _update_market_prices(self) -> None:
         logger.debug("Updating market prices")
-        latest_prices = self.gateway.get_market_prices()
+        latest_prices = self.gateway.get_market_prices(tickers=self.index_weights.index)
         self.current_portfolio.ticker_to_market_price.update(latest_prices)
         logger.info(f"Current portfolio: {self.current_portfolio}")
 
-    def _load_ticker_blacklist(self, filename: str, config: munch.Munch) -> List[str]:
+    def _update_and_cache_blacklist(self, executed_trades: List[Trade]) -> None:
+        logger.info(f"Updating blacklist with {len(executed_trades)} trades")
+        end_date = (pd.Timestamp.now() + pd.Timedelta(f"{self.config.wash_sale_days} days")).date()
+        for trade in executed_trades:
+            if trade.side != Side.SELL:
+                continue
+            if trade.symbol not in self.ticker_blacklist:
+                self.ticker_blacklist[trade.symbol] = end_date
+                continue
+            current_end_date = self.ticker_blacklist[trade.symbol]
+            if (current_end_date is not None) and end_date > current_end_date:
+                self.ticker_blacklist[trade.symbol] = end_date
+
+        jsonable = {t: (str(v) if v is not None else v) for t, v in self.ticker_blacklist.items()}
+        logger.info(f"Caching blacklist to {self.config.ticker_blacklist_file}")
+        with open(self.config.ticker_blacklist_file, "w") as f:
+            json.dump(jsonable, f, indent=2)
+
+    def _load_ticker_blacklist(self, filename: str, config: munch.Munch) -> Dict[str, Optional[datetime.date]]:
         logger.debug(f"Loading ticker blacklist from {filename}")
         with open(filename) as f:
             ticker_to_expiry: Dict[str, Optional[str]] = json.loads(f.read())
 
-        ticker_blacklist = []
+        ticker_blacklist: Dict[str, Optional[datetime.date]] = {}
         for ticker, expiry_str in ticker_to_expiry.items():
             if expiry_str is None:
-                ticker_blacklist.append(ticker)
-            elif pd.to_datetime(expiry_str).date() < datetime.date.today():
-                ticker_blacklist.append(ticker)
+                ticker_blacklist[ticker] = None
+            elif pd.to_datetime(expiry_str).date() > datetime.date.today():
+                ticker_blacklist[ticker] = pd.to_datetime(expiry_str).date()
 
         logger.info(f"Adding extra ticker blacklist from config: {config.ticker_blacklist_extra}")
-        ticker_blacklist = ticker_blacklist + config.ticker_blacklist_extra
+        ticker_blacklist.update({t: None for t in config.ticker_blacklist_extra})
         logger.info(f"Ticker blacklist: {ticker_blacklist}")
         return ticker_blacklist
 
@@ -195,6 +217,9 @@ class DirectIndexTaxLossStrategy:
             trade_px = trade_px.quantize(Decimal(PX_PRECISION))
             side = Side.BUY if trade_qty > 0 else Side.SELL
             trade = Trade(qty=abs(trade_qty), price=trade_px, side=side, symbol=ticker)
+            if trade.symbol in self.ticker_blacklist and trade.side == Side.BUY:
+                logger.warning("Skipping desired trade {trade} because of blacklist")
+                continue
             trades.append(trade)
 
             if side == Side.SELL:
@@ -203,7 +228,6 @@ class DirectIndexTaxLossStrategy:
                 tax_gain += float(-trade_qty) * (float(trade_px) - total_basis.price)
 
         logger.info(f"Planned tax gain of ${tax_gain : .2f}")
-
         logger.debug(f"len desired trades: {len(trades)}")
         logger.info(f"Desired trades: \n{chr(10).join(map(str,trades))}")
 

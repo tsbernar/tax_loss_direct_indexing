@@ -55,6 +55,8 @@ pytest = "^7.1.2"
 pytest-cov = "^3.0.0"
 requests-mock = "^1.10.0"
 freezegun = "^1.2.2"
+mock = "^4.0.3"
+types-mock = "^4.0.15"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
