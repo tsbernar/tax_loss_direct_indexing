@@ -34,11 +34,15 @@ def test_plan_transactions():
         ticker_to_cost_basis={"XYZ": CostBasisInfo("XYZ", [TaxLot(shares=10, price=20)])},
         ticker_to_market_price={"XYZ": MarketPrice(20, last_updated=datetime.datetime.now())},
     )
-    transactions = DirectIndexTaxLossStrategy._plan_transactions(mock_self, desired_portfolio=desired, current_portfolio=current)
+    transactions = DirectIndexTaxLossStrategy._plan_transactions(
+        mock_self, desired_portfolio=desired, current_portfolio=current
+    )
     assert transactions[0].symbol == "XYZ"
     assert transactions[0].side == Side.BUY
     assert transactions[0].qty == Decimal("10")
 
     mock_self.ticker_blacklist = {"XYZ": None}
-    transactions = DirectIndexTaxLossStrategy._plan_transactions(mock_self, desired_portfolio=desired, current_portfolio=current)
+    transactions = DirectIndexTaxLossStrategy._plan_transactions(
+        mock_self, desired_portfolio=desired, current_portfolio=current
+    )
     assert len(transactions) == 0
