@@ -25,11 +25,11 @@ class DirectIndexTaxLossStrategy:
         self.config = config
         self.price_matrix = self._load_yf_prices(config.price_data_file, config.optimizer.lookback_days)
         self.current_portfolio = self._load_current_portfolio(config.portfolio_file)
+        self.gateway = self._init_gateway(config.gateway)
         self._update_market_prices()
         self.ticker_blacklist: List[str] = self._load_ticker_blacklist(config.ticker_blacklist_file, config)
         self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.optimizer = self._init_optimzier(config.optimizer)
-        self.gateway = self._init_gateway(config.gateway)
 
     def run(self) -> None:
         weights, result = self._optimize()
