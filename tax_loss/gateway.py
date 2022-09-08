@@ -258,7 +258,7 @@ class IBKRGateway(Gateway):
         return response.json()["message"] == "success"
 
     def _add_conids_to_orders(self, orders: List[Order]) -> List[Order]:
-        logger.debug(f"Updating conids on orders: {orders}")
+        logger.debug(f"Updating conids on {len(orders)} orders")
         verified_orders = []
         for order in orders:
             if order.symbol not in self.symbol_to_conid:
@@ -266,7 +266,7 @@ class IBKRGateway(Gateway):
                 continue
             order.exchange_symbol = self.symbol_to_conid[order.symbol]
             verified_orders.append(order)
-        logger.debug(f"Updated conids on orders: {verified_orders}")
+        logger.debug(f"Updated conids on {len(verified_orders)} orders")
         return verified_orders
 
     @staticmethod
