@@ -281,7 +281,7 @@ class Portfolio:
         realized_gain = float(shares) * price - total_basis
         return realized_gain
 
-    def _generate_positions_table(self, max_rows: int, loss_sorted: bool) -> List[Dict[str, str]]:
+    def _generate_positions_table(self, max_rows: Optional[int], loss_sorted: bool) -> List[Dict[str, str]]:
         if max_rows is None:
             max_rows = len(self.ticker_to_cost_basis)
 
@@ -309,12 +309,15 @@ class Portfolio:
             table.sort(key=lambda x: float(x["%"].replace(",", "")), reverse=True)
         return table[:max_rows]
 
-    def head(self, max_rows=10, loss_sorted=True) -> str:
+    def head(self, max_rows: Optional[int] = 10, loss_sorted: bool = True, tablefmt: str = "simple") -> str:
         ret = f"Portfolio:\n nav:  ${self.nav : ,.2f}\n cash: ${self.cash : ,.2f}\n\n  "
-        ret += tabulate.tabulate(self._generate_positions_table(max_rows, loss_sorted), headers="keys").replace(
-            "\n", "\n  "
-        )
+        ret += tabulate.tabulate(
+            self._generate_positions_table(max_rows, loss_sorted), headers="keys", tablefmt=tablefmt
+        ).replace("\n", "\n  ")
         return ret
+
+    def to_html(self) -> str:
+        return self.head(max_rows=None, tablefmt="html")
 
     def __repr__(self) -> str:
         return self.head(None)

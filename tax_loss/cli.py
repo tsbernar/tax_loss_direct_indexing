@@ -3,11 +3,10 @@ import logging
 import sys
 
 import click
-import munch
 import urllib3
-import yaml  # type: ignore
 
 from tax_loss.strategy import DirectIndexTaxLossStrategy
+from tax_loss.util import read_config
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +21,6 @@ def setup_logging(config):
     logging.getLogger("numba").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # silance warning about no ssl verify
-
-
-def read_config(filepath):
-    config = yaml.safe_load(open(filepath))
-    config = munch.munchify(config)
-    return config
 
 
 @click.command()

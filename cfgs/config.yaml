@@ -27,3 +27,4 @@ gateway:
   credentials_filename: 'data/ib_creds'
   base_url: 'https://localhost:5000/v1/api'
   conid_filepath: 'data/IBKR_conids'
+secrets_filepath: 'data/secrets.yaml'
