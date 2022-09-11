@@ -181,12 +181,12 @@ class IBKRGateway(Gateway):
         endpoint = "/iserver/marketdata/snapshot?conids={conids}&fields={MARK_PRICE_FIELD}"
         if tickers is None:
             tickers = list(self.symbol_to_conid.keys())
-        logger.info("Requesting market prices for {tickers}")
+        logger.info(f"Requesting market prices for {tickers}")
 
         conids_remaining = set()
         for t in tickers:
             if t not in self.symbol_to_conid:
-                logger.warning("No conid found for {t}, skipping.")
+                logger.warning(f"No conid found for {t}, skipping.")
                 continue
             conids_remaining.add(self.symbol_to_conid[t])
 
