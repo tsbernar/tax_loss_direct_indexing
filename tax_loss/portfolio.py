@@ -4,7 +4,7 @@ import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import tabulate
@@ -234,6 +234,10 @@ class Portfolio:
                     raise ValueError(f"No market price for {ticker}")
                 nav += float(total_basis.shares) * self.ticker_to_market_price[ticker].price
         return float(nav)
+
+    @property
+    def positions(self) -> List[Tuple[str, Decimal]]:
+        return sorted([(ticker, cb.total_shares) for ticker, cb in self.ticker_to_cost_basis.items()])
 
     def market_value(self, ticker: str) -> float:
         return float(self.ticker_to_cost_basis[ticker].total_shares) * self.ticker_to_market_price[ticker].price

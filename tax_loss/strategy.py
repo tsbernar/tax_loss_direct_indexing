@@ -110,7 +110,7 @@ class DirectIndexTaxLossStrategy:
         cash_diff_tolerance = self.current_portfolio.nav * cash_tolerance_pct
         error_flag = False
 
-        if ibkr_portfolio.ticker_to_cost_basis != self.current_portfolio.ticker_to_cost_basis:
+        if ibkr_portfolio.positions != self.current_portfolio.positions:
             logger.critical(
                 "Current portfolio positions do not match IBKR portfolio!\n"
                 f"current:\n{self.current_portfolio}\nibkr:\n{ibkr_portfolio}"
