@@ -9,8 +9,8 @@ import munch
 import pandas as pd
 from scipy.optimize import OptimizeResult
 
-from tax_loss.email import Emailer
 from tax_loss.db import get_trades
+from tax_loss.email import Emailer
 from tax_loss.gateway import Gateway, IBKRGateway
 from tax_loss.optimizer import IndexOptimizer, MinimizeOptimizer
 from tax_loss.portfolio import Portfolio

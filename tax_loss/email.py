@@ -4,6 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Optional
 
+import munch
 import pandas as pd
 
 from tax_loss.portfolio import Portfolio
@@ -17,7 +18,7 @@ EMAIL_PORT = 587  # TODO constants in constant file
 
 class Emailer:
     def __init__(self, secrets_filepath: str):
-        config = read_config(secrets_filepath)
+        config = self._read_config(secrets_filepath)
         self.user = config.email_user
         self.pwd = config.email_app_pwd
         self.email_to = config.email_to if "email_to" in config else self.user
@@ -58,6 +59,9 @@ class Emailer:
             send_email(self.user, self.pwd, to, subject, msg)
             return
         send_email_html(self.user, self.pwd, to, subject, html_msg, msg)
+
+    def _read_config(self, filepath: str) -> munch.Munch:
+        return read_config(filepath=filepath)
 
 
 def send_email_html(user: str, pwd: str, to: str, subject: str, body_html: str, body_text: str) -> None:
