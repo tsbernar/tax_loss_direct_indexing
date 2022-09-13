@@ -5,12 +5,11 @@ import sys
 from typing import Dict
 
 import click
-import munch
 import pandas as pd
-import yaml  # type: ignore
 
 from tax_loss.db import convert_trade
 from tax_loss.trade import Side
+from tax_loss.util import read_config
 
 
 def build_query(table_name: str, start_ts: int) -> str:
@@ -20,7 +19,7 @@ def build_query(table_name: str, start_ts: int) -> str:
 @click.command()
 @click.option("--config", "config_file", required=True)
 def main(config_file: str) -> None:
-    config = munch.munchify(yaml.safe_load(open(config_file)))
+    config = read_config(config_file)
     con = sqlite3.connect(config.database.file)
     con.row_factory = sqlite3.Row
     cur = con.cursor()

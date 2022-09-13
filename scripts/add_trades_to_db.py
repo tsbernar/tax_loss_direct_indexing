@@ -4,13 +4,12 @@ import sys
 from decimal import Decimal
 
 import click
-import munch
 import pandas as pd
 import urllib3
-import yaml  # type: ignore
 
 from tax_loss.gateway import IBKRGateway
 from tax_loss.trade import Side, Trade
+from tax_loss.util import read_config
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -69,7 +68,7 @@ def build_insert_trades_statement(table_name: str) -> str:
 @click.option("--create_tables", is_flag=True)
 @click.option("--convert_all", is_flag=True)
 def main(config_file: str, verbose: bool, create_tables: bool, convert_all: bool) -> None:
-    config = munch.munchify(yaml.safe_load(open(config_file)))
+    config = read_config(config_file)
     ibkr_table_name = config.database.ibkr_trades_json_table_name
     trade_table_name = config.database.trades_table_name
 
