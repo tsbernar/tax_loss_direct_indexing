@@ -9,10 +9,12 @@ import munch
 import pandas as pd
 from scipy.optimize import OptimizeResult
 
+from tax_loss.db import get_trades
 from tax_loss.gateway import Gateway, IBKRGateway
 from tax_loss.optimizer import IndexOptimizer, MinimizeOptimizer
 from tax_loss.portfolio import Portfolio
 from tax_loss.trade import Side, Trade
+from tax_loss.util import repair_portfolio
 
 INDEX_TICKER = "IVV"
 DRY_RUN = "dry_run"
@@ -31,6 +33,7 @@ class DirectIndexTaxLossStrategy:
         self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.gateway = self._init_gateway(config.gateway)
         self._update_market_prices()
+        self._validate_current_portfolio(float(config.ibkr_vs_cache_pf_cash_diff_tolerance))
         self.optimizer = self._init_optimzier(config.optimizer)
 
     def run(self) -> None:
@@ -103,6 +106,43 @@ class DirectIndexTaxLossStrategy:
         current_portfolio = Portfolio(filename=filename)
         logger.debug(f"Current portfolio: {current_portfolio}")
         return current_portfolio
+
+    def _validate_current_portfolio(self, cash_tolerance_pct: float) -> None:
+        ibkr_portfolio = self.gateway.get_current_portfolio()
+        cash_diff_tolerance = self.current_portfolio.nav * cash_tolerance_pct
+        error_flag = False
+
+        if ibkr_portfolio.positions != self.current_portfolio.positions:
+            logger.critical(
+                "Current portfolio positions do not match IBKR portfolio!\n"
+                f"current:\n{self.current_portfolio}\nibkr:\n{ibkr_portfolio}"
+            )
+            logger.info("Trying to repair portfolio")
+            trades = get_trades(config=self.config, start_ts=pd.Timestamp.now() - pd.Timedelta("7 days"))
+            new_pf = repair_portfolio(
+                stale_portfolio=self.current_portfolio, target_portfolio=ibkr_portfolio, trades=trades
+            )
+            if new_pf is None:
+                error_flag = True
+                logger.critical("Could not repair")
+            else:
+                self.current_portfolio = new_pf
+                logger.info(f"Repaired successfully. Current portfolio: \n{self.current_portfolio}")
+
+        if abs(ibkr_portfolio.cash - self.current_portfolio.cash) > cash_diff_tolerance:
+            logger.critical(
+                f"Current portfolio is not within tolerance of IBKR cash balance. Tolerance {cash_diff_tolerance : .2f}"
+            )
+            error_flag = True
+
+        if error_flag:
+            raise ValueError("IBKR vs Current portfolio")
+
+        cash_adjustment = ibkr_portfolio.cash - self.current_portfolio.cash
+        logger.info(f"Updating cash by ${cash_adjustment: .2f}")
+        self.current_portfolio.cash += cash_adjustment
+        self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+        #  TODO save these cash adjustments in a DB table, use to figure out deposits if can't get that easily?
 
     def _update_market_prices(self) -> None:
         logger.debug("Updating market prices")

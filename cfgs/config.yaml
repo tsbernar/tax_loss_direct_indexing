@@ -10,7 +10,8 @@ dry_run:
   rotate_desired_current: True
 max_stocks: 100 # only consider top x stocks in index (minus blacklisted tickers)
 ticker_blacklist_extra: []
-wash_sale_days: 31 
+wash_sale_days: 31
+ibkr_vs_cache_pf_cash_diff_tolerance: 0.1
 database:
   file: 'data/db.db'
   ibkr_trades_json_table_name: 'ibkr_trades_json'

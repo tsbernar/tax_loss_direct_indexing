@@ -66,7 +66,7 @@ class IBKRGateway(Gateway):
         endpoint = "/iserver/account/trades"
         response = self._make_request(method="GET", endpoint=endpoint)
         ibkr_trades = response.json()
-        logger.debug(f"IBKR trades: {ibkr_trades}")
+        logger.debug(f"IBKR trades: {len(ibkr_trades)}")
         return ibkr_trades
 
     def get_orders(self) -> List[Order]:
@@ -95,7 +95,9 @@ class IBKRGateway(Gateway):
         )
         return portfolio
 
-    def try_execute(self, desired_trades: Sequence[Trade], wait: Optional[float] = 60.0) -> List[Trade]:
+    def try_execute(
+        self, desired_trades: Sequence[Trade], wait: Optional[float] = 60.0, get_trades_retries: int = 30
+    ) -> List[Trade]:
         if not self.check_if_market_open():
             logger.warning("Market appears closed, skipping execute")
             return []
@@ -104,16 +106,22 @@ class IBKRGateway(Gateway):
             orders = self._add_conids_to_orders(orders)
         sent_orders = self.submit_orders(orders)
         sent_order_ids = {o.id for o in sent_orders}
-        #  Takes a while for orders to all show up on trades.. how long?
-        logger.info(f"Waiting {wait}s before checking for trades")
-        if wait:
-            sleep(wait)
-        trades = self.get_trades()
-        logger.debug(f"Got trades: {trades}")
-        my_trades = [t for t in trades if t.order_id in sent_order_ids]
-        logger.info(f"Got trades with matching IDs: {my_trades}")
-        if len(my_trades) != len(sent_orders):
-            logger.warning("Trade vs order count mismatch")  # maybe we get partial fills? need to handle better
+        #  Takes a while for orders to all show up on trades..
+        count = 0
+        while count < get_trades_retries:
+            logger.info(f"Waiting {wait}s before checking for trades")
+            if wait:
+                sleep(wait)
+            count += 1
+            trades = self.get_trades()
+            logger.debug(f"Got trades: {len(trades)}")
+            my_trades = [t for t in trades if t.order_id in sent_order_ids]
+            my_trade_oids = {t.order_id for t in my_trades}
+            logger.info(f"Got trades with matching order IDs: {len(my_trade_oids)}")
+            if len(my_trade_oids) != len(sent_orders):
+                logger.warning(f"Trade oid vs order count mismatch {len(my_trade_oids)} {len(sent_orders)}")
+                continue
+            break
         return my_trades
 
     def get_market_prices(self, tickers: Optional[Sequence[str]] = None) -> Dict[str, MarketPrice]:
@@ -181,12 +189,12 @@ class IBKRGateway(Gateway):
         endpoint = "/iserver/marketdata/snapshot?conids={conids}&fields={MARK_PRICE_FIELD}"
         if tickers is None:
             tickers = list(self.symbol_to_conid.keys())
-        logger.info("Requesting market prices for {tickers}")
+        logger.info(f"Requesting market prices for {tickers}")
 
         conids_remaining = set()
         for t in tickers:
             if t not in self.symbol_to_conid:
-                logger.warning("No conid found for {t}, skipping.")
+                logger.warning(f"No conid found for {t}, skipping.")
                 continue
             conids_remaining.add(self.symbol_to_conid[t])
 

@@ -1,6 +1,15 @@
-import pandas as pd
+import copy
+import datetime
+from decimal import Decimal
+from typing import cast
 
-from tax_loss.util import Schedule
+import numpy as np
+import pandas as pd
+import pytest
+
+from tax_loss.portfolio import CostBasisInfo, MarketPrice, Portfolio, TaxLot
+from tax_loss.trade import Side, Trade
+from tax_loss.util import Schedule, repair_portfolio
 
 
 def test_schedule():
@@ -62,3 +71,36 @@ def test_schedule():
     assert not schedule.is_open(ts)
     ts = pd.Timestamp("20220905 10:00").tz_localize("America/Chicago")  # holiday, regular time
     assert not schedule.is_open(ts)
+
+
+@pytest.fixture
+def portfolio():
+    pf = Portfolio()
+    pf.cash = 25000.0
+    for i, ticker in enumerate(["ABC", "XYZ"]):
+        pf.ticker_to_cost_basis[ticker] = CostBasisInfo(ticker=ticker, tax_lots=[TaxLot(shares=10, price=i + 1)])
+        pf.ticker_to_market_price[ticker] = MarketPrice(price=i * 10.0, last_updated=datetime.datetime.now())
+    return pf
+
+
+def test_repair_portfolio(portfolio: Portfolio):
+    stale_pf = portfolio
+    new_pf = copy.deepcopy(portfolio)
+    trades = [
+        Trade("ABC", Decimal(10), Decimal(1), Side.BUY, exchange_ts=pd.Timestamp("2022 09 12 10:00")),
+        Trade("XYZ", Decimal(10), Decimal(2), Side.BUY, exchange_ts=pd.Timestamp("2022 09 12 10:01")),
+        Trade("ABC", Decimal(5), Decimal(12), Side.BUY, exchange_ts=pd.Timestamp("2022 09 12 10:02")),
+        Trade("ABC", Decimal(5), Decimal(12), Side.BUY, exchange_ts=pd.Timestamp("2022 09 12 10:03")),
+    ]
+
+    new_pf.buy(ticker="ABC", shares=Decimal("5"), price=12.0, fee=0.0)
+    new_pf.buy(ticker="ABC", shares=Decimal("5"), price=12.0, fee=0.0)
+
+    repaired_pf = repair_portfolio(stale_portfolio=stale_pf, target_portfolio=new_pf, trades=trades)
+    repaired_pf = cast(Portfolio, repaired_pf)
+    assert repaired_pf.positions == new_pf.positions
+    assert np.isclose(repaired_pf.cash, new_pf.cash)
+
+    new_pf.buy(ticker="XYZ", shares=Decimal("10"), price=1.0, fee=0.0)
+    repaired_pf = repair_portfolio(stale_portfolio=stale_pf, target_portfolio=new_pf, trades=trades)
+    assert repaired_pf is None
