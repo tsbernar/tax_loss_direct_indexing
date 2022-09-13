@@ -10,6 +10,7 @@ import pandas as pd
 from scipy.optimize import OptimizeResult
 
 from tax_loss.db import get_trades
+from tax_loss.email import Emailer
 from tax_loss.gateway import Gateway, IBKRGateway
 from tax_loss.optimizer import IndexOptimizer, MinimizeOptimizer
 from tax_loss.portfolio import Portfolio
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 class DirectIndexTaxLossStrategy:
     def __init__(self, config: munch.Munch) -> None:
         self.config = config
+        self.emailer = Emailer(secrets_filepath=config.secrets_filepath)
         self.price_matrix = self._load_yf_prices(config.price_data_file, config.optimizer.lookback_days)
         self.current_portfolio = self._load_current_portfolio(config.portfolio_file)
         self.ticker_blacklist: Dict[str, Optional[datetime.date]] = self._load_ticker_blacklist(
@@ -54,7 +56,12 @@ class DirectIndexTaxLossStrategy:
             executed_trades = self._wet_run(desired_trades)
 
         self._update_and_cache_blacklist(executed_trades)
-        # pull IBKR pf data, sanity check vs current pf?
+        self._send_summary_email(self.current_portfolio, executed_trades)
+
+    def _send_summary_email(self, current_portfolio: Portfolio, executed_trades: List[Trade]) -> None:
+        self.emailer.send_summary_msg(
+            executed_trades=executed_trades, current_portfolio=current_portfolio, is_dry_run=DRY_RUN in self.config
+        )
 
     def _optimize(self) -> Tuple[pd.Series, OptimizeResult]:
         logger.info("Running optimization")

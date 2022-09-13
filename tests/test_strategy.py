@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 from freezegun import freeze_time
 
+from tax_loss.email import Emailer
 from tax_loss.portfolio import CostBasisInfo, MarketPrice, Portfolio, TaxLot
 from tax_loss.strategy import DirectIndexTaxLossStrategy
 from tax_loss.trade import Side
@@ -32,6 +33,7 @@ def config():
                 "max_total_deviation": 0.5,
             },
             "gateway": {},
+            "secrets_filepath": "filename",
         }
     )
     return config
@@ -62,6 +64,9 @@ def strategy(config, monkeypatch):
     }
     mock_gw.get_current_portfolio = lambda: gw_pf
     monkeypatch.setattr(DirectIndexTaxLossStrategy, "_init_gateway", lambda x, y: mock_gw)
+    monkeypatch.setattr(
+        Emailer, "_read_config", lambda x, y: munch.Munch({"email_user": "test", "email_app_pwd": "test"})
+    )
     return DirectIndexTaxLossStrategy(config)
 
 
