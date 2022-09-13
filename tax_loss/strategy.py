@@ -86,6 +86,7 @@ class DirectIndexTaxLossStrategy:
         logger.info("Updating portfolio with trades")
         self.current_portfolio.update(executed_trades)
         logger.info(f"Current portfolio: {self.current_portfolio}")
+        logger.info(f"Current portfolio nav: {self.self.current_portfolio.nav}")
         self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
         return executed_trades
 
