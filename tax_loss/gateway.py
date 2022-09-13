@@ -119,7 +119,7 @@ class IBKRGateway(Gateway):
             logger.info(f"Got trades with matching IDs: {len(my_trades)}")
             if len(my_trades) != len(sent_orders):
                 logger.warning(
-                    "Trade vs order count mismatch {len(my_trades)} {len(send_orders)}"
+                    f"Trade vs order count mismatch {len(my_trades)} {len(sent_orders)}"
                 )  # maybe we get partial fills? need to handle better
                 continue
             break
