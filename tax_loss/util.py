@@ -61,7 +61,7 @@ def read_config(filepath):
     return config
 
 
-def _sorted_repair_portfolioo(
+def _sorted_repair_portfolio(
     stale_portfolio: Portfolio, target_portfolio: Portfolio, trades: List[Trade]
 ) -> Optional[Portfolio]:
     if stale_portfolio.positions == target_portfolio.positions:
@@ -77,7 +77,7 @@ def _sorted_repair_portfolioo(
     else:
         logger.warning(f"Unknown side for trade: {trade}")
 
-    return _sorted_repair_portfolioo(stale_portfolio, target_portfolio, trades)
+    return _sorted_repair_portfolio(stale_portfolio, target_portfolio, trades)
 
 
 def repair_portfolio(
@@ -91,4 +91,4 @@ def repair_portfolio(
     May need a smarter repair attempt, maybe keep all trade IDs in Portfolio states.
     """
     trades = sorted(trades, key=lambda t: cast(pd.Timestamp, t.exchange_ts), reverse=True)
-    return _sorted_repair_portfolioo(stale_portfolio, target_portfolio, trades)
+    return _sorted_repair_portfolio(stale_portfolio, target_portfolio, trades)
