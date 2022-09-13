@@ -116,11 +116,10 @@ class IBKRGateway(Gateway):
             trades = self.get_trades()
             logger.debug(f"Got trades: {len(trades)}")
             my_trades = [t for t in trades if t.order_id in sent_order_ids]
-            logger.info(f"Got trades with matching IDs: {len(my_trades)}")
-            if len(my_trades) != len(sent_orders):
-                logger.warning(
-                    f"Trade vs order count mismatch {len(my_trades)} {len(sent_orders)}"
-                )  # maybe we get partial fills? need to handle better
+            my_trade_oids = {t.order_id for t in my_trades}
+            logger.info(f"Got trades with matching order IDs: {len(my_trade_oids)}")
+            if len(my_trade_oids) != len(sent_orders):
+                logger.warning(f"Trade oid vs order count mismatch {len(my_trade_oids)} {len(sent_orders)}")
                 continue
             break
         return my_trades
