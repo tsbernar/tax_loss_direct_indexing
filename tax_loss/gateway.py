@@ -66,7 +66,7 @@ class IBKRGateway(Gateway):
         endpoint = "/iserver/account/trades"
         response = self._make_request(method="GET", endpoint=endpoint)
         ibkr_trades = response.json()
-        logger.debug(f"IBKR trades: {ibkr_trades}")
+        logger.debug(f"IBKR trades: {len(ibkr_trades)}")
         return ibkr_trades
 
     def get_orders(self) -> List[Order]:
