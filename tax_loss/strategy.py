@@ -9,10 +9,12 @@ import munch
 import pandas as pd
 from scipy.optimize import OptimizeResult
 
+from tax_loss.db import get_trades
 from tax_loss.gateway import Gateway, IBKRGateway
 from tax_loss.optimizer import IndexOptimizer, MinimizeOptimizer
 from tax_loss.portfolio import Portfolio
 from tax_loss.trade import Side, Trade
+from tax_loss.util import repair_portfolio
 
 INDEX_TICKER = "IVV"
 DRY_RUN = "dry_run"
@@ -115,7 +117,18 @@ class DirectIndexTaxLossStrategy:
                 "Current portfolio positions do not match IBKR portfolio!\n"
                 f"current:\n{self.current_portfolio}\nibkr:\n{ibkr_portfolio}"
             )
-            error_flag = True
+            logger.info("Trying to repair portfolio")
+            trades = get_trades(config=self.config, start_ts=pd.Timestamp.now() - pd.Timedelta("7 days"))
+            new_pf = repair_portfolio(
+                stale_portfolio=self.current_portfolio, target_portfolio=ibkr_portfolio, trades=trades
+            )
+            if new_pf is None:
+                error_flag = True
+                logger.critical("Could not repair")
+            else:
+                self.current_portfolio = new_pf
+                logger.info(f"Repaired successfully. Current portfolio: \n{self.current_portfolio}")
+
         if abs(ibkr_portfolio.cash - self.current_portfolio.cash) > cash_diff_tolerance:
             logger.critical(
                 f"Current portfolio is not within tolerance of IBKR cash balance. Tolerance {cash_diff_tolerance : .2f}"
