@@ -24,6 +24,7 @@ class Emailer:
         self.email_to = config.email_to if "email_to" in config else self.user
 
     def send_summary_msg(self, current_portfolio: Portfolio, executed_trades: List[Trade], is_dry_run=False) -> None:
+        logger.info("Sending summary email")
         if is_dry_run:
             subject = "[DRY_RUN] Direct Indexing Notification"
         else:
@@ -35,11 +36,12 @@ class Emailer:
         msg = f" --- TRADES --- {trades_str}"
 
         msg_html = "<h1> TRADES </h1>"
-        msg_html += (
-            pd.DataFrame(executed_trades)[["symbol", "qty", "price", "side", "exchange_ts"]]
-            .sort_values(["side", "qty"])
-            .to_html()
-        )
+        if executed_trades:
+            msg_html += (
+                pd.DataFrame(executed_trades)[["symbol", "qty", "price", "side", "exchange_ts"]]
+                .sort_values(["side", "qty"])
+                .to_html()
+            )
 
         msg += f"\n\n --- PORTFOLIO ---\n{current_portfolio}"
         msg_html += f"<h1> PORTFOLIO </h1>\n{current_portfolio.to_html()}"

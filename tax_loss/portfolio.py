@@ -237,7 +237,9 @@ class Portfolio:
 
     @property
     def positions(self) -> List[Tuple[str, Decimal]]:
-        return sorted([(ticker, cb.total_shares) for ticker, cb in self.ticker_to_cost_basis.items()])
+        return sorted(
+            [(ticker, cb.total_shares) for ticker, cb in self.ticker_to_cost_basis.items() if cb.total_shares > 0]
+        )
 
     def market_value(self, ticker: str) -> float:
         return float(self.ticker_to_cost_basis[ticker].total_shares) * self.ticker_to_market_price[ticker].price
@@ -275,6 +277,9 @@ class Portfolio:
             sold.shares = sold.shares - shares_remaining
             total_basis += float(shares_remaining) * sold.price
             shares_remaining = Decimal(0)
+
+        if not self.ticker_to_cost_basis[ticker].tax_lots:
+            del self.ticker_to_cost_basis[ticker]
 
         self.cash += float(shares) * price
         self.cash -= fee
@@ -317,7 +322,7 @@ class Portfolio:
         return ret
 
     def to_html(self) -> str:
-        return self.head(max_rows=None, tablefmt="html")
+        return self.head(max_rows=None, loss_sorted=False, tablefmt="html")
 
     def __repr__(self) -> str:
         return self.head(None)
