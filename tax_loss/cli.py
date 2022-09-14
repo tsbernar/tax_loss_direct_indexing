@@ -4,8 +4,8 @@ import sys
 
 import click
 import urllib3
-from tax_loss.email import Emailer
 
+from tax_loss.email import Emailer
 from tax_loss.strategy import DirectIndexTaxLossStrategy
 from tax_loss.util import read_config
 

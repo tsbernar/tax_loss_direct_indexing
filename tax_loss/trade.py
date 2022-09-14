@@ -26,6 +26,7 @@ class Trade:
     exchange_ts: Optional[pd.Timestamp] = None
     exchange_trade_id: Optional[str] = None
     order_id: Optional[str] = None
+    realized_gain: float = 0
     id: Optional[str] = None
 
     def __post_init__(self):

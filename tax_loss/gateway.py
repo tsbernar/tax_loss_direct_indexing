@@ -106,6 +106,7 @@ class IBKRGateway(Gateway):
             orders = self._add_conids_to_orders(orders)
         sent_orders = self.submit_orders(orders)
         sent_order_ids = {o.id for o in sent_orders}
+        # TODO check order status for canceled orders
         #  Takes a while for orders to all show up on trades..
         count = 0
         while count < get_trades_retries:

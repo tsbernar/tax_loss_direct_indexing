@@ -31,14 +31,14 @@ class Emailer:
             subject = "Direct Indexing Notification"
 
         trades_str = str(chr(10) + " ").join(
-            [str((t.symbol, t.qty, t.price, t.side, t.exchange_ts)) for t in executed_trades]
+            [str((t.symbol, t.qty, t.price, t.side, t.exchange_ts, t.realized_gain)) for t in executed_trades]
         )
         msg = f" --- TRADES --- {trades_str}"
 
         msg_html = "<h1> TRADES </h1>"
         if executed_trades:
             msg_html += (
-                pd.DataFrame(executed_trades)[["symbol", "qty", "price", "side", "exchange_ts"]]
+                pd.DataFrame(executed_trades)[["symbol", "qty", "price", "side", "exchange_ts", "realized_gain"]]
                 .sort_values(["side", "qty"])
                 .to_html()
             )

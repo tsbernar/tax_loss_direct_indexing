@@ -190,7 +190,10 @@ class Portfolio:
             if trade.side == Side.BUY:
                 self.buy(ticker=trade.symbol, shares=trade.qty, price=float(trade.price), fee=float(trade.fee))
             elif trade.side == Side.SELL:
-                self.sell(ticker=trade.symbol, shares=trade.qty, price=float(trade.price), fee=float(trade.fee))
+                realized_gain = self.sell(
+                    ticker=trade.symbol, shares=trade.qty, price=float(trade.price), fee=float(trade.fee)
+                )
+                trade.realized_gain = realized_gain
 
     def _from_json_file(self, filename: str) -> None:
         with open(filename) as f:
