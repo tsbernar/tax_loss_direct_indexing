@@ -297,7 +297,7 @@ class DirectIndexTaxLossStrategy:
 
         tax_coefficient = float(config.tax_coefficient)
         starting_portfolio = self.current_portfolio
-        initial_weight_guess = self.index_weights  # TODO (guess current pf or true weights if current is too far off?)
+        initial_weight_guess = true_index_weights  # TODO (guess current pf or true weights if current is too far off?)
         max_deviation_from_true_weight = float(config.max_deviation_from_true_weight)
 
         # Do not increase posiiton for tickers in the blacklist

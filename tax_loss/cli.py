@@ -4,6 +4,7 @@ import sys
 
 import click
 import urllib3
+from tax_loss.email import Emailer
 
 from tax_loss.strategy import DirectIndexTaxLossStrategy
 from tax_loss.util import read_config
@@ -29,8 +30,14 @@ def main(config_file):
     config = read_config(config_file)
     setup_logging(config)
     logger.info(f"Starting app with config : \n{json.dumps(config, indent=4)}")
-    strategy = DirectIndexTaxLossStrategy(config)
-    strategy.run()
+    try:
+        strategy = DirectIndexTaxLossStrategy(config)
+        strategy.run()
+    except Exception as e:
+        logger.critical(f"Exception while running {e}")
+        emailer = Emailer(config.secrets_filepath)
+        emailer.send_msg(f"Exception while running {e}", subject="Direct Indexing Failure Notification")
+        return 1
 
     return 0
 
