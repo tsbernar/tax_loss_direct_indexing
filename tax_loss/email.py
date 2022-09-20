@@ -37,11 +37,10 @@ class Emailer:
 
         msg_html = "<h1> TRADES </h1>"
         if executed_trades:
-            msg_html += (
-                pd.DataFrame(executed_trades)[["symbol", "qty", "price", "side", "exchange_ts", "realized_gain"]]
-                .sort_values(["side", "qty"])
-                .to_html()
-            )
+            df = pd.DataFrame(executed_trades)[["symbol", "qty", "price", "side", "exchange_ts", "realized_gain"]]
+            df.side = df.side.astype(str)
+            df = df.sort_values(["side", "qty"])
+            msg_html += df.to_html()
 
         msg += f"\n\n --- PORTFOLIO ---\n{current_portfolio}"
         msg_html += f"<h1> PORTFOLIO </h1>\n{current_portfolio.to_html()}"

@@ -70,14 +70,14 @@ class DirectIndexTaxLossStrategy:
         elapsed = time.time() - t0
         logger.info(f"Optimization took {elapsed : .2f}s")
 
-        if not result.success:
-            logger.critical(f"Failed optimization.. result: {result}")
-
         logger.info(f"Weights: \n{weights.sort_values()}")
         logger.info(f"Total deviation from index: {abs(weights - self.index_weights).sum()}")
         logger.info(f"Total weight: {weights.sum()}")
         logger.debug(f"Current pf nav: {self.current_portfolio.nav}")
 
+        if not result.success:
+            logger.critical(f"Failed optimization.. result: {result}")
+            raise ValueError("Failed Optimization.. result: {result}")
         return weights, result
 
     def _wet_run(self, desired_trades: List[Trade]) -> List[Trade]:

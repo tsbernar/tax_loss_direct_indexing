@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+import traceback
 
 import click
 import urllib3
@@ -34,9 +35,11 @@ def main(config_file):
         strategy = DirectIndexTaxLossStrategy(config)
         strategy.run()
     except Exception as e:
-        logger.critical(f"Exception while running {e}")
+        logger.critical(f"Exception while running: {e}\n{traceback.format_exc()}")
         emailer = Emailer(config.secrets_filepath)
-        emailer.send_msg(f"Exception while running {e}", subject="Direct Indexing Failure Notification")
+        emailer.send_msg(
+            f"Exception while running: {e}\n{traceback.format_exc()}", subject="Direct Indexing Failure Notification"
+        )
         return 1
 
     return 0
