@@ -106,6 +106,9 @@ def save_sp500_weighting_data(start_date, end_date, data_directory, ticker_corre
 
         # sleep for 50ms to not spam the api
         sleep(0.05)
+    
+    if len(dates):
+        del requested_dates[max(dates)]  # Hack to request the last date again next time.  We might have requested on this date before data available
 
     if len(csv_data):
         df = pd.concat([df, pd.concat(csv_data)]).drop_duplicates()
@@ -114,7 +117,7 @@ def save_sp500_weighting_data(start_date, end_date, data_directory, ticker_corre
 
     df.to_parquet(ivv_weight_file, compression="GZIP")
     with open(date_cache_file, "w") as f:
-        f.write(json.dumps(requested_dates, sort_keys=True))
+        f.write(json.dumps(requested_dates, sort_keys=True, indent=2))
 
 
 def concat_or_update(df: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFrame:

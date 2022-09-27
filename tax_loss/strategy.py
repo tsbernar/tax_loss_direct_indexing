@@ -77,7 +77,7 @@ class DirectIndexTaxLossStrategy:
 
         if not result.success:
             logger.critical(f"Failed optimization.. result: {result}")
-            raise ValueError("Failed Optimization.. result: {result}")
+            raise ValueError(f"Failed Optimization.. result: {result}")
         return weights, result
 
     def _wet_run(self, desired_trades: List[Trade]) -> List[Trade]:
