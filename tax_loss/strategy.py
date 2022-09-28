@@ -77,11 +77,16 @@ class DirectIndexTaxLossStrategy:
 
         self._update_and_cache_blacklist(executed_trades)
         self._cache_weights(weights)
-        self._send_summary_email(self.current_portfolio, executed_trades)
+        self._send_summary_email(self.current_portfolio, executed_trades, rebalance)
 
-    def _send_summary_email(self, current_portfolio: Portfolio, executed_trades: List[Trade]) -> None:
+    def _send_summary_email(
+        self, current_portfolio: Portfolio, executed_trades: List[Trade], is_rebalance: bool
+    ) -> None:
         self.emailer.send_summary_msg(
-            executed_trades=executed_trades, current_portfolio=current_portfolio, is_dry_run=self.is_dry_run
+            executed_trades=executed_trades,
+            current_portfolio=current_portfolio,
+            is_dry_run=self.is_dry_run,
+            is_rebalance=is_rebalance,
         )
 
     def _optimize(self) -> Tuple[pd.Series, OptimizeResult]:

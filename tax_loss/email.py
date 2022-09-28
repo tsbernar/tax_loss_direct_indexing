@@ -23,7 +23,13 @@ class Emailer:
         self.pwd = config.email_app_pwd
         self.email_to = config.email_to if "email_to" in config else self.user
 
-    def send_summary_msg(self, current_portfolio: Portfolio, executed_trades: List[Trade], is_dry_run=False) -> None:
+    def send_summary_msg(
+        self,
+        current_portfolio: Portfolio,
+        executed_trades: List[Trade],
+        is_dry_run: bool = False,
+        is_rebalance: bool = False,
+    ) -> None:
         logger.info("Sending summary email")
         if is_dry_run:
             subject = "[DRY_RUN] Direct Indexing Notification"
@@ -33,9 +39,11 @@ class Emailer:
         trades_str = str(chr(10) + " ").join(
             [str((t.symbol, t.qty, t.price, t.side, t.exchange_ts, t.realized_gain)) for t in executed_trades]
         )
-        msg = f" --- TRADES --- {trades_str}"
+        msg = f"Rebalance: {is_rebalance}\n"
+        msg += f" --- TRADES --- {trades_str}"
 
-        msg_html = "<h1> TRADES </h1>"
+        msg_html = f"<h2> Rebalance: {is_rebalance} </h2>\n"
+        msg_html = "<h1> TRADES </h1>\n"
         if executed_trades:
             df = pd.DataFrame(executed_trades)[["symbol", "qty", "price", "side", "exchange_ts", "realized_gain"]]
             df.side = df.side.astype(str)
@@ -43,7 +51,7 @@ class Emailer:
             msg_html += df.to_html()
 
         msg += f"\n\n --- PORTFOLIO ---\n{current_portfolio}"
-        msg_html += f"<h1> PORTFOLIO </h1>\n{current_portfolio.to_html()}"
+        msg_html += f"\n<h1> PORTFOLIO </h1>\n{current_portfolio.to_html()}"
 
         self.send_msg(msg=msg, html_msg=msg_html, subject=subject)
 
