@@ -25,42 +25,60 @@ logger = logging.getLogger(__name__)
 
 class DirectIndexTaxLossStrategy:
     def __init__(self, config: munch.Munch) -> None:
-        self.config = config
+        self.weight_cache_file = config.weight_cache_file
+        self.is_dry_run = DRY_RUN in config
+        self.portfolio_file = config.portfolio_file
+        self.wash_sale_days = config.wash_sale_days
+        self.ticker_blacklist_file = config.ticker_blacklist_file
+
         self.emailer = Emailer(secrets_filepath=config.secrets_filepath)
         self.price_matrix = self._load_yf_prices(config.price_data_file, config.optimizer.lookback_days)
         self.current_portfolio = self._load_current_portfolio(config.portfolio_file)
         self.ticker_blacklist: Dict[str, Optional[datetime.date]] = self._load_ticker_blacklist(
-            config.ticker_blacklist_file, config
+            self.ticker_blacklist_file, config.ticker_blacklist_extra
         )
         self.index_weights = self._load_index_weights(config.index_weight_file, config.max_stocks)
         self.gateway = self._init_gateway(config.gateway)
         self._update_market_prices()
-        self._validate_current_portfolio(float(config.ibkr_vs_cache_pf_cash_diff_tolerance))
-        self.optimizer = self._init_optimzier(config.optimizer)
+        self._validate_current_portfolio(config, float(config.ibkr_vs_cache_pf_cash_diff_tolerance))
+        self.optimizer = self._init_optimizer(config.optimizer)
 
-    def run(self) -> None:
-        weights, result = self._optimize()
+        if self.is_dry_run:
+            self.desired_portfolio_file = config[DRY_RUN].desired_portfolio_file
+            self.rotate_desired_current = config[DRY_RUN].rotate_desired_current
+
+    def run(self, rebalance: bool = True) -> None:
+        #  On a rebalance run, we recalucate our portfolio optimization.
+        #  On a no rebalance run, we just keep the same portfolio weighting but can still do some trades,
+        #  only buys to avoid adding to washsale backlist, to invest a new cash deposit.
+        if not rebalance:
+            weights = self._read_and_update_cached_weights()
+        elif rebalance:
+            weights, _ = self._optimize()
+
         desired_portfolio = Portfolio.from_weights(
             weights=weights,
             nav=self.current_portfolio.nav,
             ticker_to_market_price=self.current_portfolio.ticker_to_market_price,
             blacklist=list(self.ticker_blacklist.keys()),
         )
+
         logger.info(f"Desired portfolio:\n{desired_portfolio}")
         desired_trades = self._plan_transactions(
             desired_portfolio=desired_portfolio, current_portfolio=self.current_portfolio
         )
-        if DRY_RUN in self.config:
+        if self.is_dry_run:
             executed_trades = self._dry_run(desired_portfolio, desired_trades)
         else:
             executed_trades = self._wet_run(desired_trades)
 
         self._update_and_cache_blacklist(executed_trades)
+        self._cache_weights(weights)
         self._send_summary_email(self.current_portfolio, executed_trades)
 
     def _send_summary_email(self, current_portfolio: Portfolio, executed_trades: List[Trade]) -> None:
         self.emailer.send_summary_msg(
-            executed_trades=executed_trades, current_portfolio=current_portfolio, is_dry_run=DRY_RUN in self.config
+            executed_trades=executed_trades, current_portfolio=current_portfolio, is_dry_run=self.is_dry_run
         )
 
     def _optimize(self) -> Tuple[pd.Series, OptimizeResult]:
@@ -87,27 +105,27 @@ class DirectIndexTaxLossStrategy:
         self.current_portfolio.update(executed_trades)
         logger.info(f"Current portfolio: {self.current_portfolio}")
         logger.info(f"Current portfolio nav: {self.current_portfolio.nav}")
-        self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+        self._cache_portfolio(portfolio=self.current_portfolio, filename=self.portfolio_file)
         return executed_trades
 
     def _dry_run(self, desired_portfolio: Portfolio, desired_trades: List[Trade]) -> List[Trade]:
-        logger.info(f"Saving desired portfolio to {self.config[DRY_RUN].desired_portfolio_file}")
-        desired_portfolio.to_json_file(self.config[DRY_RUN].desired_portfolio_file)
-        if self.config[DRY_RUN].rotate_desired_current:
+        logger.info(f"Saving desired portfolio to {self.desired_portfolio_file}")
+        self._cache_portfolio(portfolio=desired_portfolio, filename=self.desired_portfolio_file)
+        if self.rotate_desired_current:
             self._rotate_current_portfolio()
             # for dry run, assume we can execute all trades at current prices
             logger.info("Updating portfolio with trades")
             self.current_portfolio.update(desired_trades)
             logger.info(f"Current portfolio: {self.current_portfolio}")
-            self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
+            self._cache_portfolio(portfolio=self.current_portfolio, filename=self.portfolio_file)
         return desired_trades
 
     def _rotate_current_portfolio(self):
-        filename = self.config.portfolio_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
+        filename = self.portfolio_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
         if ".json" in filename:  # move extension to the end
             filename = filename.replace(".json", "") + ".json"
         logger.info(f"Rotating last portfolio to {filename}")
-        self.current_portfolio.to_json_file(filename=filename)
+        self._cache_portfolio(portfolio=self.current_portfolio, filename=filename)
 
     def _load_current_portfolio(self, filename: str) -> Portfolio:
         logger.info(f"Loading current portfolio from {filename}")
@@ -115,7 +133,7 @@ class DirectIndexTaxLossStrategy:
         logger.debug(f"Current portfolio: {current_portfolio}")
         return current_portfolio
 
-    def _validate_current_portfolio(self, cash_tolerance_pct: float) -> None:
+    def _validate_current_portfolio(self, config: munch.Munch, cash_tolerance_pct: float) -> None:
         ibkr_portfolio = self.gateway.get_current_portfolio()
         cash_diff_tolerance = self.current_portfolio.nav * cash_tolerance_pct
         error_flag = False
@@ -126,7 +144,7 @@ class DirectIndexTaxLossStrategy:
                 f"current:\n{self.current_portfolio}\nibkr:\n{ibkr_portfolio}"
             )
             logger.info("Trying to repair portfolio")
-            trades = get_trades(config=self.config, start_ts=pd.Timestamp.now() - pd.Timedelta("7 days"))
+            trades = get_trades(config=config, start_ts=pd.Timestamp.now() - pd.Timedelta("7 days"))
             new_pf = repair_portfolio(
                 stale_portfolio=self.current_portfolio, target_portfolio=ibkr_portfolio, trades=trades
             )
@@ -149,7 +167,6 @@ class DirectIndexTaxLossStrategy:
         cash_adjustment = ibkr_portfolio.cash - self.current_portfolio.cash
         logger.info(f"Updating cash by ${cash_adjustment: .2f}")
         self.current_portfolio.cash += cash_adjustment
-        self.current_portfolio.to_json_file(filename=self.config.portfolio_file)
         #  TODO save these cash adjustments in a DB table, use to figure out deposits if can't get that easily?
 
     def _update_market_prices(self) -> None:
@@ -158,9 +175,42 @@ class DirectIndexTaxLossStrategy:
         self.current_portfolio.ticker_to_market_price.update(latest_prices)
         logger.info(f"Current portfolio: {self.current_portfolio}")
 
+    def _cache_portfolio(self, portfolio: Portfolio, filename: str) -> None:
+        portfolio.to_json_file(filename=filename)
+
+    def _cache_weights(self, weights: pd.Series) -> None:
+        filename = self.weight_cache_file + pd.Timestamp.now().strftime("%Y%m%d_%H%M")
+        if ".json" in filename:  # move extension to the end
+            filename = filename.replace(".json", "") + ".json"
+        filenames = [self.weight_cache_file, filename]
+        logger.info(f"Caching weights with market prices to {filenames}")
+
+        df = pd.DataFrame(weights, columns=["weight"])
+        df["market_price"] = pd.Series({t: m.price for t, m in self.current_portfolio.ticker_to_market_price.items()})
+        for fn in filenames:
+            with open(fn, "w") as f:
+                f.write(df.to_json(indent=2))
+
+    def _read_and_update_cached_weights(self) -> pd.Series:
+        # Market prices may have moved, we want to stay equal weighted by market cap from last rebalance
+        # Recalculate new weights based on price changes.  Should have no new trades expected unless
+        # cash balance changes,for example from a new depsoit that we need to invest.
+        # TODO: This (among other things) will break from share splits without manual intervention.
+        df = pd.read_json(self.weight_cache_file)
+        df["new_market_price"] = pd.Series(
+            {t: m.price for t, m in self.current_portfolio.ticker_to_market_price.items()}
+        )
+
+        # How much portfolio value has changed from market prices alone (ignoring any new cash transactions)
+        ratio = (df.weight / df.market_price * df.new_market_price).sum() + 1 - df.weight.sum()
+        # New weight, keeping same market cap weight as before
+        df["new_weight"] = (df.weight * df.new_market_price / df.market_price) / ratio
+        print(df.head(100))
+        return df["new_weight"]
+
     def _update_and_cache_blacklist(self, executed_trades: List[Trade]) -> None:
         logger.info(f"Updating blacklist with {len(executed_trades)} trades")
-        end_date = (pd.Timestamp.now() + pd.Timedelta(f"{self.config.wash_sale_days} days")).date()
+        end_date = (pd.Timestamp.now() + pd.Timedelta(f"{self.wash_sale_days} days")).date()
         for trade in executed_trades:
             if trade.side != Side.SELL:
                 continue
@@ -172,11 +222,13 @@ class DirectIndexTaxLossStrategy:
                 self.ticker_blacklist[trade.symbol] = end_date
 
         jsonable = {t: (str(v) if v is not None else v) for t, v in self.ticker_blacklist.items()}
-        logger.info(f"Caching blacklist to {self.config.ticker_blacklist_file}")
-        with open(self.config.ticker_blacklist_file, "w") as f:
+        logger.info(f"Caching blacklist to {self.ticker_blacklist_file}")
+        with open(self.ticker_blacklist_file, "w") as f:
             json.dump(jsonable, f, indent=2)
 
-    def _load_ticker_blacklist(self, filename: str, config: munch.Munch) -> Dict[str, Optional[datetime.date]]:
+    def _load_ticker_blacklist(
+        self, filename: str, ticker_blacklist_extra: List[str]
+    ) -> Dict[str, Optional[datetime.date]]:
         logger.debug(f"Loading ticker blacklist from {filename}")
         with open(filename) as f:
             ticker_to_expiry: Dict[str, Optional[str]] = json.loads(f.read())
@@ -188,8 +240,8 @@ class DirectIndexTaxLossStrategy:
             elif pd.to_datetime(expiry_str).date() > datetime.date.today():
                 ticker_blacklist[ticker] = pd.to_datetime(expiry_str).date()
 
-        logger.info(f"Adding extra ticker blacklist from config: {config.ticker_blacklist_extra}")
-        ticker_blacklist.update({t: None for t in config.ticker_blacklist_extra})
+        logger.info(f"Adding extra ticker blacklist from config: {ticker_blacklist_extra}")
+        ticker_blacklist.update({t: None for t in ticker_blacklist_extra})
         logger.info(f"Ticker blacklist: {ticker_blacklist}")
         return ticker_blacklist
 
@@ -266,7 +318,7 @@ class DirectIndexTaxLossStrategy:
             side = Side.BUY if trade_qty > 0 else Side.SELL
             trade = Trade(qty=abs(trade_qty), price=trade_px, side=side, symbol=ticker)
             if trade.symbol in self.ticker_blacklist and trade.side == Side.BUY:
-                logger.warning("Skipping desired trade {trade} because of blacklist")
+                logger.warning(f"Skipping desired trade {trade} because of blacklist")
                 continue
             trades.append(trade)
 
@@ -286,7 +338,7 @@ class DirectIndexTaxLossStrategy:
         gateway = IBKRGateway(config=config)
         return gateway
 
-    def _init_optimzier(self, config: munch.Munch) -> IndexOptimizer:
+    def _init_optimizer(self, config: munch.Munch) -> IndexOptimizer:
         logger.info("Initializing optimizer")
         index_returns = self._make_index_returns(INDEX_TICKER)
         component_returns = self._make_component_returns()
@@ -297,7 +349,11 @@ class DirectIndexTaxLossStrategy:
 
         tax_coefficient = float(config.tax_coefficient)
         starting_portfolio = self.current_portfolio
-        initial_weight_guess = true_index_weights  # TODO (guess current pf or true weights if current is too far off?)
+        initial_weight_guess = pd.Series(
+            {ticker: self.current_portfolio.weight(ticker) for ticker in true_index_weights.index}
+        )
+        initial_weight_guess.index.name = true_index_weights.index.name
+
         max_deviation_from_true_weight = float(config.max_deviation_from_true_weight)
 
         # Do not increase posiiton for tickers in the blacklist
