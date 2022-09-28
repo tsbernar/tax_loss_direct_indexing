@@ -5,6 +5,7 @@ portfolio_file: 'data/portfolio.json'
 ticker_blacklist_file: 'data/ticker_blacklist.json'
 index_weight_file: 'data/IVV_weights.parquet'
 price_data_file: 'data/yf_tickers.parquet'
+weight_cache_file: 'data/pf_weights.json'
 dry_run:
   desired_portfolio_file: 'data/desired_portfolio.json'
   rotate_desired_current: True
@@ -18,13 +19,12 @@ database:
   trades_table_name: 'trades'
 optimizer:
   tax_coefficient: 0.6
-  max_deviation_from_true_weight: 0.02
+  max_deviation_from_true_weight: 0.05
   max_total_deviation: .6
   cash_constraint: 0.95
   tracking_error_func: 'least_squared'
   lookback_days: 365
 gateway:
-  credentials_filename: 'data/ib_creds'
   base_url: 'https://localhost:5000/v1/api'
   conid_filepath: 'data/IBKR_conids'
 secrets_filepath: 'data/secrets.yaml'

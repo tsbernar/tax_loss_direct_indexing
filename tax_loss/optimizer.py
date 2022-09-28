@@ -249,7 +249,7 @@ class MinimizeOptimizer(IndexOptimizer):
             [self.max_total_deviation / len(self.initial_weight_guess) for i in self.initial_weight_guess]
         )
         x0 = pd.concat([self.initial_weight_guess, index_drift_extra_vars])
-        bounds += [(-np.inf, np.inf) for x in index_drift_extra_vars]  # no bounds on extra vars
+        bounds += [(-np.inf, np.inf) for _ in index_drift_extra_vars]  # no bounds on extra vars
         cons += self._make_index_drift_constraints()
 
         result = minimize(

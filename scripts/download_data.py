@@ -106,9 +106,10 @@ def save_sp500_weighting_data(start_date, end_date, data_directory, ticker_corre
 
         # sleep for 50ms to not spam the api
         sleep(0.05)
-    
+
     if len(dates):
-        del requested_dates[max(dates)]  # Hack to request the last date again next time.  We might have requested on this date before data available
+        # Hack to request the last date again next time.  We might have requested on this date before data available
+        del requested_dates[max(dates)]
 
     if len(csv_data):
         df = pd.concat([df, pd.concat(csv_data)]).drop_duplicates()

@@ -27,13 +27,14 @@ def setup_logging(config):
 
 @click.command()
 @click.option("--config", "config_file", required=True)
-def main(config_file):
+@click.option("--rebalance", is_flag=True, default=False)
+def main(config_file: str, rebalance: bool):
     config = read_config(config_file)
     setup_logging(config)
-    logger.info(f"Starting app with config : \n{json.dumps(config, indent=4)}")
+    logger.info(f"Starting app with rebalance: {rebalance} and config : \n{json.dumps(config, indent=4)}")
     try:
         strategy = DirectIndexTaxLossStrategy(config)
-        strategy.run()
+        strategy.run(rebalance=rebalance)
     except Exception as e:
         logger.critical(f"Exception while running: {e}\n{traceback.format_exc()}")
         emailer = Emailer(config.secrets_filepath)

@@ -9,8 +9,11 @@ def update(c):
 
 
 @task
-def test(c):
-    c.run("pytest tests --cov -s -v --color=yes")
+def test(c, e2e=False):
+    if e2e:
+        c.run("pytest tests --cov=tax_loss --e2e -s -v --color=yes")
+    else:
+        c.run("pytest tests --cov=tax_loss -s -v --color=yes")
 
 
 @task

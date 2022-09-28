@@ -10,11 +10,16 @@ Getting started:
 4. inv install # Install package
 
 Running locally:
-1. poetry run tax_loss
+* poetry run tax_loss
 
 Building
 --------
-1. inv build
+* inv build
+
+Testing
+--------
+* inv test
+Note adding --e2e will include end-to-end tests (which will be slower to run).
 
 Features
 --------

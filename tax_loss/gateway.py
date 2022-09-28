@@ -42,17 +42,12 @@ class Gateway(abc.ABC):
 
 class IBKRGateway(Gateway):
     def __init__(self, config: munch.Munch):
-        self.credentials: munch.Munch = self._read_credentials(config.credentials_filename)
         self.base_url = config.base_url
         self.conid_filepath = config.conid_filepath
         if not self._check_auth_status():
             self._re_auth()
         self.account_id: str = self._get_account_id()
         self.symbol_to_conid = self._get_conids()
-
-    @staticmethod
-    def _read_credentials(credentials_filename: str) -> munch.Munch:
-        pass
 
     def get_trades(self) -> List[Trade]:
         ibkr_trades = self.get_ibkr_trades()

@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import logging
@@ -78,7 +79,7 @@ class CostBasisInfo:
         self.tax_lots.sort(key=lambda x: x.price, reverse=True)
 
     def total_loss_basis(self, price: float) -> TaxLot:
-        # Returns a TaxLot for all shares with a basis lower than price
+        """Returns a TaxLot for all shares with a basis lower than price"""
         total_price = 0.0
         total_shares = Decimal("0.0")
 
@@ -146,6 +147,45 @@ class Portfolio:
             self._from_json_file(filename)
 
     @classmethod
+    def from_weights_and_starting_pf(
+        cls,
+        weights: pd.Series,
+        starting_pf: "Portfolio",
+        blacklist: Optional[List[str]] = None,
+    ) -> "Portfolio":
+
+        """Constructs a new portfolio from weights and a starting pf.
+        Will only BUY extra shares to get closer to target weights, no sells"""
+
+        weights = weights.round(6)
+        assert weights.sum() <= 1.0 + 1e-6
+        if blacklist is None:
+            blacklist = []
+
+        logger.info(
+            f"Constructing portfolio from weights and starting pf.\n"
+            f"weights: \n{weights.sort_values()}"
+            f"starting_pf: \n{starting_pf}"
+        )
+        pf = copy.deepcopy(starting_pf)
+        nav = pf.nav
+
+        for ticker, weight in weights.items():
+            if ticker in blacklist:
+                continue
+            price = pf.ticker_to_market_price[ticker].price
+            extra_shares = (weight - pf.weight(ticker)) * nav / price
+            # Round down to avoid using more than nav value
+            extra_shares = Decimal(extra_shares).quantize(Decimal(SHARE_QUANTIZE), rounding=ROUND_DOWN)
+            if (extra_shares > 0) and (pf.cash > float(extra_shares) * price):
+                print(f"buying {ticker} {extra_shares}.  {weight} vs {pf.weight(ticker)}")
+                pf.buy(ticker, extra_shares, price)
+
+        # Now go back and fill in extra shares if we are underweight with any extra cash
+        pf._fill_under_weight(weights=weights, nav=nav, blacklist=blacklist)
+        return pf
+
+    @classmethod
     def from_weights(
         cls,
         weights: pd.Series,
@@ -153,8 +193,10 @@ class Portfolio:
         ticker_to_market_price: Dict[str, "MarketPrice"],
         blacklist: Optional[List[str]] = None,
     ) -> "Portfolio":
+        """Constructs a new portfolio from weights"""
+        weights = weights.round(6)
         logger.info(f"Constructing portfolio from weights:\n{weights.sort_values()}")
-        assert weights.sum() <= 1.0 + 1e-6  # allow for some floating point errors
+        assert weights.sum() <= 1.0 + 1e-6
         if blacklist is None:
             blacklist = []
 
@@ -169,20 +211,8 @@ class Portfolio:
             if shares > 0:
                 pf.buy(ticker, shares, price)
 
-        # Now go back and fill in extra shares with any extra cash
-        under_weight_cash = {t: (w - pf.weight(t)) * nav for t, w in weights.items() if pf.weight(t) < w}
-        logger.debug(f"Under weight cash values:\n{json.dumps(under_weight_cash,indent=2)}")
-        after_buy = {
-            t: (pf.ticker_to_market_price[t].price * float(SHARE_QUANTIZE) - c) for t, c in under_weight_cash.items()
-        }
-
-        for ticker, after_buy in sorted(after_buy.items(), key=lambda x: x[1]):
-            if ticker in blacklist:
-                continue
-            price = pf.ticker_to_market_price[ticker].price
-            if price * float(SHARE_QUANTIZE) < pf.cash:
-                pf.buy(ticker, Decimal(SHARE_QUANTIZE), price)
-
+        # Now go back and fill in extra shares if we are underweight with any extra cash
+        pf._fill_under_weight(weights=weights, nav=nav, blacklist=blacklist)
         return pf
 
     def update(self, trades: List[Trade]) -> None:
@@ -288,6 +318,22 @@ class Portfolio:
         self.cash -= fee
         realized_gain = float(shares) * price - total_basis
         return realized_gain
+
+    def _fill_under_weight(self, weights: pd.Series, nav: float, blacklist: List[str]):
+        # Go back and fill in extra shares with any extra cash
+        under_weight_cash = {t: (w - self.weight(t)) * nav for t, w in weights.items() if self.weight(t) < w}
+        logger.debug(f"Under weight cash values:\n{json.dumps(under_weight_cash,indent=2)}")
+        after_buy_over_weight = {
+            t: (self.ticker_to_market_price[t].price * float(SHARE_QUANTIZE) - w) for t, w in under_weight_cash.items()
+        }
+
+        # Buy min share increments starting with tickers that will put us least over weight
+        for ticker, _ in sorted(after_buy_over_weight.items(), key=lambda x: x[1]):
+            if ticker in blacklist:
+                continue
+            price = self.ticker_to_market_price[ticker].price
+            if price * float(SHARE_QUANTIZE) < self.cash:
+                self.buy(ticker, Decimal(SHARE_QUANTIZE), price)
 
     def _generate_positions_table(self, max_rows: Optional[int], loss_sorted: bool) -> List[Dict[str, str]]:
         if max_rows is None:

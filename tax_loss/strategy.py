@@ -48,20 +48,23 @@ class DirectIndexTaxLossStrategy:
             self.rotate_desired_current = config[DRY_RUN].rotate_desired_current
 
     def run(self, rebalance: bool = True) -> None:
-        #  On a rebalance run, we recalucate our portfolio optimization.
-        #  On a no rebalance run, we just keep the same portfolio weighting but can still do some trades,
-        #  only buys to avoid adding to washsale backlist, to invest a new cash deposit.
+        """On a rebalance run, we recalucate our portfolio optimization.
+        On a no rebalance run, we just keep the same portfolio weighting but can still do some trades,
+        we only do buys to avoid adding to washsale backlist, main usecase to invest a new cash deposit."""
         if not rebalance:
             weights = self._read_and_update_cached_weights()
+            desired_portfolio = Portfolio.from_weights_and_starting_pf(
+                weights=weights, starting_pf=self.current_portfolio, blacklist=list(self.ticker_blacklist.keys())
+            )
+
         elif rebalance:
             weights, _ = self._optimize()
-
-        desired_portfolio = Portfolio.from_weights(
-            weights=weights,
-            nav=self.current_portfolio.nav,
-            ticker_to_market_price=self.current_portfolio.ticker_to_market_price,
-            blacklist=list(self.ticker_blacklist.keys()),
-        )
+            desired_portfolio = Portfolio.from_weights(
+                weights=weights,
+                nav=self.current_portfolio.nav,
+                ticker_to_market_price=self.current_portfolio.ticker_to_market_price,
+                blacklist=list(self.ticker_blacklist.keys()),
+            )
 
         logger.info(f"Desired portfolio:\n{desired_portfolio}")
         desired_trades = self._plan_transactions(
@@ -205,7 +208,6 @@ class DirectIndexTaxLossStrategy:
         ratio = (df.weight / df.market_price * df.new_market_price).sum() + 1 - df.weight.sum()
         # New weight, keeping same market cap weight as before
         df["new_weight"] = (df.weight * df.new_market_price / df.market_price) / ratio
-        print(df.head(100))
         return df["new_weight"]
 
     def _update_and_cache_blacklist(self, executed_trades: List[Trade]) -> None:
