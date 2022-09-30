@@ -164,7 +164,7 @@ class Portfolio:
 
         logger.info(
             f"Constructing portfolio from weights and starting pf.\n"
-            f"weights: \n{weights.sort_values()}"
+            f"weights: \n{weights.sort_values()}\n"
             f"starting_pf: \n{starting_pf}"
         )
         pf = copy.deepcopy(starting_pf)

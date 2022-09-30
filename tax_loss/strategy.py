@@ -195,6 +195,7 @@ class DirectIndexTaxLossStrategy:
 
         df = pd.DataFrame(weights, columns=["weight"])
         df["market_price"] = pd.Series({t: m.price for t, m in self.current_portfolio.ticker_to_market_price.items()})
+        logger.info(df)
         for fn in filenames:
             with open(fn, "w") as f:
                 f.write(df.to_json(indent=2))
