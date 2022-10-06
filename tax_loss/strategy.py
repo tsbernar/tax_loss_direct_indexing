@@ -214,8 +214,9 @@ class DirectIndexTaxLossStrategy:
         ratio = (df.weight / df.market_price * df.new_market_price).sum() + 1 - df.weight.sum()
         # New weight, keeping same market cap weight as before
         df["new_weight"] = (df.weight * df.new_market_price / df.market_price) / ratio
+        df.index.name = "Ticker"
         logger.info(f"Read and update cached weights from {self.weight_cache_file}:\n{df}")
-        return df["new_weight"]
+        return df["new_weight"].rename()
 
     def _update_and_cache_blacklist(self, executed_trades: List[Trade]) -> None:
         logger.info(f"Updating blacklist with {len(executed_trades)} trades")

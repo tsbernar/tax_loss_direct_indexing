@@ -49,7 +49,7 @@ def strategy(config, monkeypatch):
     monkeypatch.setattr(
         Emailer, "_read_config", lambda x, y: munch.Munch({"email_user": "test", "email_app_pwd": "test"})
     )
-    monkeypatch.setattr(DirectIndexTaxLossStrategy, "_send_summary_email", lambda x, y, z: None)
+    monkeypatch.setattr(DirectIndexTaxLossStrategy, "_send_summary_email", lambda w, x, y, z: None)
     #  don't write out files for tests
     monkeypatch.setattr(DirectIndexTaxLossStrategy, "_cache_portfolio", lambda x, portfolio, filename: None)
     monkeypatch.setattr(DirectIndexTaxLossStrategy, "_cache_weights", lambda x, y: None)
