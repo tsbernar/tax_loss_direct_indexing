@@ -153,8 +153,11 @@ class Portfolio:
         ticker_to_market_price: Dict[str, "MarketPrice"],
         blacklist: Optional[List[str]] = None,
     ) -> "Portfolio":
-        logger.info(f"Constructing portfolio from weights:\n{weights.sort_values()}")
-        assert weights.sum() <= 1.0 + 1e-6  # allow for some floating point errors
+        """Constructs a new portfolio from weights"""
+        assert weights.sum() <= 1.0 + 1e-6
+        weights = weights.round(6)
+        logger.info(f"Constructing portfolio from weights:\n{weights.sort_values()}\n sum: {weights.sum()}")
+        assert weights.sum() <= 1.0 + 1e-6
         if blacklist is None:
             blacklist = []
 
