@@ -3,7 +3,7 @@ import datetime
 import logging
 from decimal import Decimal
 from time import sleep
-from typing import Dict, List, Optional, Sequence, Set, Union
+from typing import Dict, List, Optional, Sequence, Set, Union, cast
 
 import munch
 import pandas as pd
@@ -64,6 +64,13 @@ class IBKRGateway(Gateway):
         logger.debug(f"IBKR trades: {len(ibkr_trades)}")
         return ibkr_trades
 
+    def get_order(self, order_id: str) -> Order:
+        endpoint = f"/iserver/account/order/status/{order_id}"
+        response = self._make_request(method="GET", endpoint=endpoint)
+        ibkr_order = response.json()
+        logger.debug(f"IBKR order:{ibkr_order}")
+        return self._decode_ibkr_order_status(ibkr_order)
+
     def get_orders(self) -> List[Order]:
         endpoint = "/iserver/account/orders"
         response = self._make_request(method="GET", endpoint=endpoint)
@@ -79,11 +86,9 @@ class IBKRGateway(Gateway):
         self._recalc_portfolio()
         cash = self._get_cash()
         positions = self._get_positions()
-        # TODO this does not have full cost basis info!!!
         ticker_to_cost_basis = {
             str(p["contractDesc"]): self._decode_cost_basis_info(p) for p in positions if Decimal(p["position"]) != 0
         }
-        # TODO : Use market data endpoint to get update with real "last_updated" ts?
         ticker_to_market_price = {str(p["contractDesc"]): self._decode_market_price(p) for p in positions}
         portfolio = Portfolio(
             cash=cash, ticker_to_cost_basis=ticker_to_cost_basis, ticker_to_market_price=ticker_to_market_price
@@ -102,7 +107,7 @@ class IBKRGateway(Gateway):
         sent_orders = self.submit_orders(orders)
         sent_order_ids = {o.id for o in sent_orders}
         # TODO check order status for canceled orders
-        #  Takes a while for orders to all show up on trades..
+        # Takes a while for orders to all show up on trades..
         count = 0
         while count < get_trades_retries:
             logger.info(f"Waiting {wait}s before checking for trades")
@@ -335,6 +340,92 @@ class IBKRGateway(Gateway):
         )
 
     @staticmethod
+    def _decode_ibkr_order_status(ibkr_order_status: Dict[str, Union[None, bool, str, int]]) -> Order:
+        """
+        {'sub_type': None,
+        'request_id': '46445',
+        'order_id': 658253830,
+        'conidex': '265598',
+        'conid': 265598,
+        'symbol': 'AAPL',
+        'side': 'B',
+        'contract_description_1': 'AAPL',
+        'listing_exchange': 'NASDAQ.NMS',
+        'option_acct': 'c',
+        'company_name': 'APPLE INC',
+        'size': '1.0',
+        'total_size': '1.0',
+        'currency': 'USD',
+        'account': 'DU5822420',
+        'order_type': 'MARKET',
+        'cum_fill': '0.0',
+        'order_status': 'Cancelled',
+        'order_status_description': 'Order Cancelled',
+        'tif': 'IOC',
+        'fg_color': '#FFFFFF',
+        'bg_color': '#AA0000',
+        'order_not_editable': True,
+        'editable_fields': '\x1e',
+        'cannot_cancel_order': True,
+        'deactivate_order': False,
+        'sec_type': 'STK',
+        'available_chart_periods': '#R|1',
+        'order_description': 'Cancelled 1 Market IOC',
+        'order_description_with_contract': '1 AAPL Market IOC',
+        'alert_active': 1,
+        'child_order_type': '0',
+        'order_clearing_account': 'DU5822420',
+        'size_and_fills': '0/1',
+        'exit_strategy_display_price': '149.48',
+        'exit_strategy_chart_description': 'Cancelled 1 Market IOC',
+        'exit_strategy_tool_availability': '1',
+        'allowed_duplicate_opposite': True,
+        'order_time': '220928232950',
+        'order_cancellation_by_system_reason': 'Cancelled by System:\n'}
+        """
+
+        if ibkr_order_status["order_status"] == "Cancelled":
+            status = OrderStatus.CANCELLED
+        elif ibkr_order_status["order_status"] == "Filled":
+            status = OrderStatus.CANCELLED
+        elif ibkr_order_status["order_status"] == "PreSubmitted":
+            status = OrderStatus.PENDING_SUBMIT
+        else:
+            logger.warning(f"Unknown orders status {ibkr_order_status['order_status']}")
+
+        filled_size = Decimal(cast(str, ibkr_order_status["cum_fill"]))
+        size = Decimal(cast(str, ibkr_order_status["size"]))
+
+        if filled_size == size:
+            fill_status = FillStatus.FILLED
+        elif filled_size > 0:
+            fill_status = FillStatus.PARTIAL_FILLED
+        elif filled_size == 0:
+            fill_status = FillStatus.NOT_FILLED
+
+        if ibkr_order_status["side"] == "B":
+            side = Side.BUY
+        elif ibkr_order_status["side"] == "S":
+            side = Side.SELL
+        else:
+            side = Side.UNKNOWN
+
+        return Order(
+            symbol=cast(str, ibkr_order_status["symbol"]),
+            qty=Decimal(cast(str, ibkr_order_status["total_size"])),
+            price=Decimal(cast(str, ibkr_order_status["exit_strategy_display_price"])),
+            side=side,
+            exchange_symbol=str(ibkr_order_status["conid"]),
+            status=status,
+            fill_status=fill_status,
+            exchange_ts=pd.Timestamp(ibkr_order_status["order_time"], unit="ms", tz="UTC").tz_convert(
+                "America/Chicago"
+            ),
+            exchange_order_id=str(ibkr_order_status["order_id"]),
+            id=str(ibkr_order_status["order_id"]),  # Client ID not returned on this endpoint
+        )
+
+    @staticmethod
     def _decode_ibkr_order(ibkr_order: Dict[str, Union[str, float, int]]) -> Order:
         """
         {'acct': 'DU5822420',
@@ -383,7 +474,7 @@ class IBKRGateway(Gateway):
 
         return Order(
             symbol=str(ibkr_order["ticker"]),
-            qty=Decimal(str(float(ibkr_order["remainingQuantity"]) + float(ibkr_order["filledQuantity"]))),
+            qty=Decimal(str(cast(float, ibkr_order["remainingQuantity"]) + cast(float, ibkr_order["filledQuantity"]))),
             price=Decimal(str(ibkr_order["limit_price"])) if "limit_price" in ibkr_order else Decimal(0),
             side=side,
             exchange_symbol=str(ibkr_order["conid"]),
