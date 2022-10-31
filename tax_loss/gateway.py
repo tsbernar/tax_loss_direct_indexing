@@ -164,6 +164,7 @@ class IBKRGateway(Gateway):
         for order_response in order_responses:
             if not isinstance(order_response, dict) or ("local_order_id" not in order_response):
                 logger.warning(f"Skipping order_response {order_response}")
+                continue
             order = id_to_submitted_map[order_response["local_order_id"]]
             updated_orders.append(self._update_order(order, order_response))
 
@@ -222,7 +223,7 @@ class IBKRGateway(Gateway):
 
     def _reply_question(
         self, order_response: Dict[str, Union[str, List[str]]]
-    ) -> List[Dict[str, Union[str, List[str]]]]:
+    ) -> Dict[str, Union[str, List[str]]]:
         endpoint = "/iserver/reply/{replyid}"
         # Sometimes you need to answer questions about a submission, ex:
         # {'id': 'dd0227af-2de0-46fe-947d-1fd83f314e20',
@@ -231,21 +232,20 @@ class IBKRGateway(Gateway):
         # and unexpected trades.\nAre you sure you want to submit this order?'],
         # 'isSuppressed': False, 'messageIds': ['o354']}
         # Always answer yes .. :/
-        responses = []
         logger.warning(f"Question when submitting order: {order_response}, answering yes")
-        for replyid in order_response["messageIds"]:
-            endpoint = endpoint.format(replyid=replyid)
+        replyid = order_response['id']
+        endpoint = endpoint.format(replyid=replyid)
+        response = self._make_request(method="POST", endpoint=endpoint, json_data={"confirmed": True})
+        tries = 1
+        while not response.ok and tries <= 3:
+            tries += 1
+            sleep(1)
+            logger.info("Retrying..")
             response = self._make_request(method="POST", endpoint=endpoint, json_data={"confirmed": True})
-            tries = 1
-            while not response.ok and tries <= 3:
-                tries += 1
-                sleep(1)
-                logger.info("Retrying..")
-                response = self._make_request(method="POST", endpoint=endpoint, json_data={"confirmed": True})
 
-            responses += response.json()
-
-        return responses
+        if response.ok:
+            return response.json()
+        return {}
 
     def _get_cash(self) -> float:
         endpoint = f"/portfolio/{self.account_id}/summary"
