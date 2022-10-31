@@ -99,6 +99,7 @@ def create_app(config=None):
         return returns
 
     @app.route("/api/holdings")
+    @auth.login_required_api
     def holdings():
         args = request.args
 
@@ -113,12 +114,23 @@ def create_app(config=None):
         return response_body
 
     @app.get("/api/parameters")
+    @auth.login_required_api
     def get_parameters():
-        pass
+        response_body = {
+            "max_stocks": 100,
+            "tax_coefficient": 0.6,
+            "tracking_error_func": "tracking_error_func",
+            "max_total_deviation": 0.6,
+            "cash_constraint": 0.95,
+        }
+        return response_body
 
     @app.post("/api/parameters")
+    @auth.login_required_api
     def update_parameters():
-        pass
+        if not g.logged_in:
+            response_body = {"message": "Not authenticated"}
+            return response_body, 403
 
     app.register_blueprint(auth.bp)
     bp = Blueprint("portfolio", __name__)
