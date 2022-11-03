@@ -3,6 +3,7 @@ import { template_dark } from './PlotlyTemplate';
 import {
   ChakraProvider,
   InputGroup,
+  extendTheme,
   Input,
   InputRightElement,
   Button,
@@ -233,6 +234,7 @@ class App extends React.Component {
     // Don't really understand this yet, but needed to access "this" in functions
     this.logout = this.logout.bind(this);
     this.handlePwdKeyPress = this.handlePwdKeyPress.bind(this);
+    this.requestData = this.requestData.bind(this);
   }
 
   handlePwdKeyPress(e) {
@@ -240,7 +242,13 @@ class App extends React.Component {
       const pwd = e.target.value;
       authAPIData(pwd).then(success => {
         if (success) {
-          this.setState({ auth_required: false, error: false, error_data: '' });
+          this.setState({
+            auth_required: false,
+            error: false,
+            error_data: '',
+            loaded: false,
+          });
+          this.requestData();
         } else {
           console.log('bad pwd');
           this.setState({ error: true, error_data: 'Incorrect password' });
@@ -256,8 +264,7 @@ class App extends React.Component {
     this.setState({ error: false, auth_required: true });
   }
 
-  componentDidMount() {
-    console.log('mounted');
+  requestData() {
     getAPIData('returns')
       .then(jsonData => {
         console.log(jsonData);
@@ -281,12 +288,22 @@ class App extends React.Component {
       });
   }
 
+  componentDidMount() {
+    this.requestData();
+  }
+
   render() {
+    const config = {
+      useSystemColorMode: false,
+      initialColorMode: 'dark',
+    };
+    const customTheme = extendTheme({ config });
+
     return (
-      <ChakraProvider theme={theme}>
+      <ChakraProvider theme={customTheme}>
         <Box textAlign="right" fontSize="xl">
           <Grid minH="10vh" p={3}>
-            <ColorModeSwitcher justifySelf="flex-end" color="dark" />
+            <ColorModeSwitcher justifySelf="flex-end" />
             <Menu
               {...this.state}
               logout={this.logout}
