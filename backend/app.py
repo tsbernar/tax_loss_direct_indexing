@@ -77,11 +77,9 @@ def get_navs():  # dummy data for now
     return navs
 
 
-def create_app(config=None):
-    app = Flask(__name__, instance_relative_config=True)
-    app.config.from_mapping(SECRET_KEY="dev", DATABASE="/Users/tb/projects/tax_loss/app/tax_loss/data/db.db")
-    if config is not None:
-        app.config.from_mapping(config)
+def create_app(config: str):
+    app = Flask(__name__)
+    app.config.from_pyfile(config)
 
     @app.route("/api/returns")
     def retruns():
