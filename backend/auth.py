@@ -6,7 +6,7 @@ from werkzeug.security import check_password_hash
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
-@bp.route("/", methods=["POST"])
+@bp.route("", methods=["POST"])
 def auth_api():
     data = request.json
     password = data["pw"]
