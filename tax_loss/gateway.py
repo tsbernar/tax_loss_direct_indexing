@@ -221,9 +221,7 @@ class IBKRGateway(Gateway):
 
         return result
 
-    def _reply_question(
-        self, order_response: Dict[str, Union[str, List[str]]]
-    ) -> Dict[str, Union[str, List[str]]]:
+    def _reply_question(self, order_response: Dict[str, Union[str, List[str]]]) -> Dict[str, Union[str, List[str]]]:
         endpoint = "/iserver/reply/{replyid}"
         # Sometimes you need to answer questions about a submission, ex:
         # {'id': 'dd0227af-2de0-46fe-947d-1fd83f314e20',
@@ -233,7 +231,7 @@ class IBKRGateway(Gateway):
         # 'isSuppressed': False, 'messageIds': ['o354']}
         # Always answer yes .. :/
         logger.warning(f"Question when submitting order: {order_response}, answering yes")
-        replyid = order_response['id']
+        replyid = order_response["id"]
         endpoint = endpoint.format(replyid=replyid)
         response = self._make_request(method="POST", endpoint=endpoint, json_data={"confirmed": True})
         tries = 1
