@@ -178,7 +178,6 @@ class Portfolio:
             # Round down to avoid using more than nav value
             extra_shares = Decimal(extra_shares).quantize(Decimal(SHARE_QUANTIZE), rounding=ROUND_DOWN)
             if (extra_shares > 0) and (pf.cash > float(extra_shares) * price):
-                print(f"buying {ticker} {extra_shares}.  {weight} vs {pf.weight(ticker)}")
                 pf.buy(ticker, extra_shares, price)
 
         # Now go back and fill in extra shares if we are underweight with any extra cash

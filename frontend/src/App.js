@@ -131,8 +131,6 @@ function ReturnPlot(props) {
 function PasswordInput(props) {
   const [show, setShow] = React.useState(false);
   const handleClick = () => setShow(!show);
-  console.log(props.handleKeyPress);
-  console.log(typeof props.handleKeyPress);
 
   let text = 'Auth Required';
   if ('text' in props) {
@@ -249,7 +247,6 @@ class App extends React.Component {
           });
           this.requestData();
         } else {
-          console.log('bad pwd');
           this.setState({ error: true, error_data: 'Incorrect password' });
         }
       });
@@ -257,24 +254,19 @@ class App extends React.Component {
   }
 
   logout() {
-    console.log('logging out');
     logoutAPI();
-    console.log('logged out, updated state');
     this.setState({ error: false, auth_required: true });
   }
 
   requestData() {
     getAPIData('returns')
       .then(jsonData => {
-        console.log(jsonData);
         if ('index_returns' in jsonData) {
-          console.log('got api data');
           this.setState({ return_data: jsonData, loaded: true });
         } else if (
           'message' in jsonData &&
           jsonData['message'].startsWith('Not authenticated')
         ) {
-          console.log('not authenticated');
           this.setState({ loaded: true, auth_required: true });
         }
       })
