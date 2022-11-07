@@ -12,7 +12,6 @@ import {
   Text,
   Spinner,
   Grid,
-  theme,
   Tabs,
   TabList,
   TabPanels,
