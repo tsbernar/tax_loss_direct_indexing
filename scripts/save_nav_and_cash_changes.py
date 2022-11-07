@@ -37,13 +37,9 @@ def main(logfile: str, navout: str, cashout: str):
         ts_to_cash_change = {}
         for line in f:
             if "Current portfolio nav:" in line:
-                ts_to_nav[parse_ts(line)] = float(
-                    line.split("Current portfolio nav:")[1]
-                )
+                ts_to_nav[parse_ts(line)] = float(line.split("Current portfolio nav:")[1])
             if "Updating cash by $" in line:
-                ts_to_cash_change[parse_ts(line)] = float(
-                    line.split("Updating cash by $")[1]
-                )
+                ts_to_cash_change[parse_ts(line)] = float(line.split("Updating cash by $")[1])
 
     # If we already have data saved, just append new data
     last_ts_nav = get_last_ts(navout)
@@ -51,11 +47,7 @@ def main(logfile: str, navout: str, cashout: str):
     if last_ts_nav:
         ts_to_nav = {ts: nav for ts, nav in ts_to_nav.items() if ts > last_ts_nav}
     if last_ts_cash_change:
-        ts_to_cash_change = {
-            ts: cash
-            for ts, cash in ts_to_cash_change.items()
-            if ts > last_ts_cash_change
-        }
+        ts_to_cash_change = {ts: cash for ts, cash in ts_to_cash_change.items() if ts > last_ts_cash_change}
     print(f"Found {len(ts_to_nav)} nav updates.")
     print(f"Found {len(ts_to_cash_change)} cash changes.")
     if ts_to_nav:

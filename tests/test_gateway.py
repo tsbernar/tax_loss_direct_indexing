@@ -193,7 +193,7 @@ def test_submit_orders(gateway, requests_mock, order):
         ],
     )
     mocked = requests_mock.post(
-        gateway.base_url + "/iserver/reply/o354",
+        gateway.base_url + "/iserver/reply/dd0227af-2de0-46fe-947d-1fd83f314e20",
         json=[
             {
                 "order_id": "1483841810",
