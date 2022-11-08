@@ -93,9 +93,6 @@ def strategy_patched(monkeypatch, config):
     )
     monkeypatch.setattr(DirectIndexTaxLossStrategy, "_load_current_portfolio", lambda x, y: cur_pf)
     monkeypatch.setattr(DirectIndexTaxLossStrategy, "_load_ticker_blacklist", lambda x, y, z: {"A": None})
-    monkeypatch.setattr(
-        DirectIndexTaxLossStrategy, "_load_index_weights", lambda x, y, z: pd.Series([0.75, 0.25], index=["A", "AA"])
-    )
     mock_gw = mock.Mock()
     mock_gw.get_market_prices = lambda tickers: {
         "A": MarketPrice(10.0, pd.Timestamp.now().to_pydatetime()),
@@ -150,6 +147,18 @@ def test_plan_transactions():
 
 def test_init_strategy(strategy_patched):
     assert isinstance(strategy_patched, DirectIndexTaxLossStrategy)
+
+
+def test_read_index_weights_with_ticker_dropped_from_index(strategy_patched):
+    # file has ticker ABC in it which is not in the index.  This simulates a ticker being dropped from the index
+    strategy_patched.weight_cache_file = "tests/resources/weights_extra_ticker.json"
+    strategy_patched.current_portfolio.ticker_to_market_price
+    # ABC will be in the index with reading straight from file
+    df = pd.read_json(strategy_patched.weight_cache_file)
+    assert "ABC" in df.index
+    # But it should be dropped from here
+    s = strategy_patched._read_and_update_cached_weights()
+    assert "ABC" not in s.index
 
 
 def test_validate_current_portfolio(config, strategy_patched):

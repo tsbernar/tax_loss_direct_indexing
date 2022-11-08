@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
 import munch
+import numpy as np
 import pandas as pd
 from scipy.optimize import OptimizeResult
 
@@ -209,7 +210,15 @@ class DirectIndexTaxLossStrategy:
         df["new_market_price"] = pd.Series(
             {t: m.price for t, m in self.current_portfolio.ticker_to_market_price.items()}
         )
-
+        to_drop = df[np.isnan(df["new_market_price"])]
+        if len(to_drop):
+            logger.warning(f"Dropping tickers from cached weights with no market price or not in index:\n {to_drop}")
+            for ticker in to_drop.index:
+                if ticker not in self.index_weights.index:
+                    logger.warning(f"{ticker} not in Index")
+                else:
+                    logger.warning(f"{ticker} in index, but missing price")
+        df = df.drop(to_drop.index)
         # How much portfolio value has changed from market prices alone (ignoring any new cash transactions)
         ratio = (df.weight / df.market_price * df.new_market_price).sum() + 1 - df.weight.sum()
         # New weight, keeping same market cap weight as before
