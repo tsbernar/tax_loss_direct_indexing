@@ -61,10 +61,9 @@ def create_app(config: str):
     @auth.login_required_api
     def holdings():
         args = request.args
+        filename = current_app.config["PORTFOLIO_FILE"]
+        portfolio = Portfolio(filename=filename)
 
-        portfolio = Portfolio(filename="data/portfolio.json")
-
-        # data = request.get_json()
         response_body = {
             "nav": portfolio.nav,
             "positions": portfolio._generate_positions_table(None, False),

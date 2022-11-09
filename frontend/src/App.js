@@ -480,7 +480,7 @@ class App extends React.Component {
         if (err) {
           this.setState({ error_data: String(err) });
         }
-        this.setState({ error: true, loaded: true });
+        this.setState({ error: true, returns_loaded: true });
       });
     console.log('requeting holdings data');
     getAPIData('holdings')
@@ -505,7 +505,7 @@ class App extends React.Component {
         if (err) {
           this.setState({ error_data: String(err) });
         }
-        this.setState({ error: true, loaded: true });
+        this.setState({ error: true, holdings_loaded: true });
       });
   }
 
