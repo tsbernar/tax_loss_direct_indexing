@@ -10,6 +10,12 @@ import {
   useColorModeValue,
   Box,
   Text,
+  Table,
+  Tbody,
+  Thead,
+  Tr,
+  Th,
+  Td,
   Spinner,
   Grid,
   Tabs,
@@ -17,6 +23,7 @@ import {
   TabPanels,
   Tab,
   TabPanel,
+  TableContainer,
 } from '@chakra-ui/react';
 import { ColorModeSwitcher } from './ColorModeSwitcher';
 import Plot from 'react-plotly.js';
@@ -156,18 +163,205 @@ function PasswordInput(props) {
   );
 }
 
-class Returns extends React.Component {
+function Loading() {
+  return (
+    <Spinner
+      thickness="4px"
+      speed="0.65s"
+      emptyColor="gray.200"
+      color="blue.500"
+      size="xl"
+    />
+  );
+}
+
+class Holdings extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      sorted_positions: [],
+      ascending: true,
+    };
+    this.sort_positions = this.sort_positions.bind(this);
+  }
+
+  sort_positions(sort_key) {
+    const ascending = !this.state.ascending;
+    const mult = ascending ? 1 : -1;
+    let sorted_positions = [...this.props.holdings_data.positions];
+    sorted_positions.sort((a_, b_) => {
+      let a = a_[sort_key];
+      let b = b_[sort_key];
+      // first remove $ from cash fields
+      if (typeof a === 'string' && a.length && a[0] === '$') {
+        a = a.slice(2).replace(',', '');
+      }
+      if (typeof b === 'string' && b.length && b[0] === '$') {
+        b = b.slice(2).replace(',', '');
+      }
+      // convert to number if numeric
+      if (!isNaN(a) && !isNaN(b)) {
+        a = Number(a);
+        b = Number(b);
+      }
+      if (a < b) {
+        return -1 * mult;
+      }
+      if (a > b) {
+        return 1 * mult;
+      }
+      return 0;
+    });
+    this.setState({
+      sorted_positions: sorted_positions,
+      ascending: ascending,
+    });
+  }
+
   render() {
-    if (!this.props.loaded) {
+    if (!this.props.holdings_loaded) {
+      return <Loading></Loading>;
+    }
+    if (this.props.auth_required) {
       return (
-        <Spinner
-          thickness="4px"
-          speed="0.65s"
-          emptyColor="gray.200"
-          color="blue.500"
-          size="xl"
+        <PasswordInput
+          handleKeyPress={this.props.handlePwdKeyPress}
+          text={this.props.error ? ' | Error: ' + this.props.error_data : ''}
         />
       );
+    } else if (this.props.error) {
+      return <Text>{this.props.error_data}</Text>;
+    }
+
+    let positions = this.props.holdings_data.positions;
+    if (this.state.sorted_positions.length) {
+      positions = this.state.sorted_positions;
+    }
+
+    return (
+      <Box width={['100wv', '100vw', '100vw', '80vw']}>
+        <Text>
+          {' '}
+          NAV: $
+          {Intl.NumberFormat('en-US').format(
+            this.props.holdings_data.nav.toFixed(2)
+          )}{' '}
+        </Text>
+        <TableContainer>
+          <Table variant="striped" fontSize="xs" size="xs" overflowX="scroll">
+            <Thead>
+              <Tr w="14%">
+                <Th>
+                  <Button
+                    size="xs"
+                    onClick={() => this.sort_positions('ticker')}
+                  >
+                    TICKER ↕️
+                  </Button>
+                </Th>
+                <Th w="14%">
+                  <Button
+                    size="xs"
+                    onClick={() => this.sort_positions('total_shares')}
+                  >
+                    SHARES ↕️
+                  </Button>
+                </Th>
+                <Th w="14%">
+                  <Button
+                    size="xs"
+                    onClick={() =>
+                      this.sort_positions('total_shares_with_loss')
+                    }
+                  >
+                    W/ LOSS ↕️
+                  </Button>
+                </Th>
+                <Th w="14%">
+                  <Button
+                    size="xs"
+                    onClick={() => this.sort_positions('total_gain/loss')}
+                  >
+                    uPNL ↕️
+                  </Button>
+                </Th>
+                <Th w="14%">
+                  <Button
+                    size="xs"
+                    onClick={() => this.sort_positions('market_price')}
+                  >
+                    PRICE ↕️
+                  </Button>
+                </Th>
+                <Th w="14%">
+                  <Button
+                    size="xs"
+                    onClick={() => this.sort_positions('market_value')}
+                  >
+                    VALUE ↕️
+                  </Button>
+                </Th>
+                <Th w="14%">
+                  <Button size="xs" onClick={() => this.sort_positions('%')}>
+                    % ↕️
+                  </Button>
+                </Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {positions.map(position => {
+                return (
+                  <Tr key={position.ticker}>
+                    <Td>{position.ticker}</Td>
+                    <Td>{Number(position.total_shares)}</Td>
+                    <Td>{Number(position.total_shares_with_loss)}</Td>
+                    <Td>{position['total_gain/loss']}</Td>
+                    <Td>{position.market_price}</Td>
+                    <Td>{position.market_value}</Td>
+                    <Td>{Number(position['%'])}</Td>
+                  </Tr>
+                );
+              })}
+              <Tr key="Total">
+                <Td>Total</Td>
+                <Td>
+                  {positions.reduce((sum, position) => {
+                    return sum + Number(position.total_shares);
+                  }, 0)}
+                </Td>
+                <Td>
+                  {positions.reduce((sum, position) => {
+                    return sum + Number(position.total_shares_with_loss);
+                  }, 0)}
+                </Td>
+                <Td>
+                  {positions
+                    .reduce((sum, position) => {
+                      return sum + Number(position['total_gain/loss'].slice(1));
+                    }, 0)
+                    .toFixed(2)}
+                </Td>
+                <Td>-</Td>
+                <Td>
+                  {positions
+                    .reduce((sum, position) => {
+                      return sum + Number(position.market_value.slice(1));
+                    }, 0)
+                    .toFixed(2)}
+                </Td>
+                <Td>-</Td>
+              </Tr>
+            </Tbody>
+          </Table>
+        </TableContainer>
+      </Box>
+    );
+  }
+}
+class Returns extends React.Component {
+  render() {
+    if (!this.props.returns_loaded) {
+      return <Loading></Loading>;
     }
     if (this.props.auth_required) {
       return (
@@ -206,7 +400,7 @@ function Menu(props) {
             <Returns {...props} />
           </TabPanel>
           <TabPanel>
-            <Text> Holdings </Text>
+            <Holdings {...props} />
           </TabPanel>
           <TabPanel>
             <Text> Parameters </Text>
@@ -222,7 +416,9 @@ class App extends React.Component {
     super(props);
     this.state = {
       return_data: 'Loading',
-      loaded: false,
+      returns_loaded: false,
+      holdings_loaded: false,
+      params_loaded: false,
       error: false,
       error_data: 'Unknown error',
       auth_required: false,
@@ -243,7 +439,9 @@ class App extends React.Component {
             auth_required: false,
             error: false,
             error_data: '',
-            loaded: false,
+            returns_loaded: false,
+            holdings_loaded: false,
+            params_loaded: false,
           });
           this.requestData();
         } else {
@@ -259,15 +457,47 @@ class App extends React.Component {
   }
 
   requestData() {
+    console.log('requesting return data');
     getAPIData('returns')
       .then(jsonData => {
         if ('index_returns' in jsonData) {
-          this.setState({ return_data: jsonData, loaded: true });
+          this.setState({ return_data: jsonData, returns_loaded: true });
         } else if (
           'message' in jsonData &&
           jsonData['message'].startsWith('Not authenticated')
         ) {
-          this.setState({ loaded: true, auth_required: true });
+          this.setState({
+            returns_loaded: true,
+            holdings_loaded: true,
+            params_loaded: true,
+            auth_required: true,
+          });
+          return;
+        }
+      })
+      .catch(err => {
+        console.log(`error ${err}`);
+        if (err) {
+          this.setState({ error_data: String(err) });
+        }
+        this.setState({ error: true, loaded: true });
+      });
+    console.log('requeting holdings data');
+    getAPIData('holdings')
+      .then(jsonData => {
+        if ('positions' in jsonData) {
+          this.setState({ holdings_data: jsonData, holdings_loaded: true });
+        } else if (
+          'message' in jsonData &&
+          jsonData['message'].startsWith('Not authenticated')
+        ) {
+          this.setState({
+            returns_loaded: true,
+            holdings_loaded: true,
+            params_loaded: true,
+            auth_required: true,
+          });
+          return;
         }
       })
       .catch(err => {
@@ -280,7 +510,10 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    this.requestData();
+    console.log(`mount ${JSON.stringify(this.state)})`);
+    if (!(this.state.returns_loaded && this.state.holdings_loaded)) {
+      this.requestData();
+    }
   }
 
   render() {
@@ -300,20 +533,6 @@ class App extends React.Component {
               logout={this.logout}
               handlePwdKeyPress={this.handlePwdKeyPress}
             />
-            {/* <VStack spacing={8} >
-              <Text>
-                Edit <Code fontSize="xl">src/App.js</Code> and save to reload.
-              </Text>
-              <Link
-                color="teal.500"
-                href="https://chakra-ui.com"
-                fontSize="2xl"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Learn Chakra
-              </Link>
-            </VStack> */}
           </Grid>
         </Box>
       </ChakraProvider>
