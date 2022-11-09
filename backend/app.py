@@ -67,6 +67,7 @@ def create_app(config: str):
         response_body = {
             "nav": portfolio.nav,
             "positions": portfolio._generate_positions_table(None, False),
+            "cash": portfolio.cash,
             "args": args,
         }
         return response_body
