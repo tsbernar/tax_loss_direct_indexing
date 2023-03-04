@@ -18,7 +18,7 @@ IVV_REQUESTED_DATES = "requested_dates.json"
 IVV_WEIGHTS_BASE_URL = "https://www.ishares.com/us/products/239726/ishares-core-sp-500-etf/1467271812596.ajax?fileType=csv&fileName=IVV_holdings&dataType=fund&asOfDate="  # noqa: E501
 IBKR_BASE_URL = "https://localhost:5000/v1/api/trsrv/stocks/?symbols="
 TICKER_DATA_FILE_NAME = "yf_tickers.parquet"
-EXTRA_YF_TICKERS = ["IVV"]
+EXTRA_YF_TICKERS = ["IVV", "GEHC"]
 
 IVV_TICKER_CORRECTION_MAP = {  # To match yf
     "BRKB": "BRK-B",

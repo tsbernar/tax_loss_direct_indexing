@@ -233,7 +233,7 @@ class MinimizeOptimizer(IndexOptimizer):
 
     def optimize(self) -> Tuple[pd.Series, OptimizeResult]:
 
-        bounds = [self._get_bounds(ticker, tw) for ticker, tw in self.true_index_weights.iteritems()]
+        bounds = [self._get_bounds(ticker, tw) for ticker, tw in self.true_index_weights.items()]
         cons = self._make_cash_constraints()
         # TODO add in extra penalty for churn
         # TODO some of this should be moved to init
@@ -264,7 +264,7 @@ class MinimizeOptimizer(IndexOptimizer):
             ),
             bounds=bounds,
             constraints=cons,
-            options={"maxiter": 400}  # 4x the default max
+            options={"maxiter": 800}  # 8x the default max
             #  options={'eps':1e-8}
         )
 

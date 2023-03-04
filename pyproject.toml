@@ -34,7 +34,7 @@ pandas = "^1.4.3"
 numpy = "^1.23.2"
 tabulate = "^0.8.10"
 fastparquet = "^0.8.2"
-yfinance = "^0.1.74"
+yfinance = "^0.1.85"
 requests = "^2.28.1"
 bokeh = {version = "^2.4.3", optional = true}
 jupyter = {version = "^1.0.0", optional = true}

@@ -372,6 +372,7 @@ class DirectIndexTaxLossStrategy:
             {ticker: self.current_portfolio.weight(ticker) for ticker in true_index_weights.index}
         )
         initial_weight_guess.index.name = true_index_weights.index.name
+        # initial_weight_guess = true_index_weights
 
         max_deviation_from_true_weight = float(config.max_deviation_from_true_weight)
 
